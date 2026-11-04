@@ -27,6 +27,9 @@
       + 上傳日誌檔案
       <input type="file" multiple="{{true}}" accept=".log,.txt" onChange="{{handleFiles}}" style="display:none;" />
     </label>
+    <sc-if value="{{loading}}" hint-placeholder-val="{{false}}">
+      <div style="font-size:12px;color:oklch(0.75 0.1 235);white-space:nowrap;flex-shrink:0;">解析中… {{progressText}}</div>
+    </sc-if>
     <input placeholder="搜尋 PID / Interface / IP / Error Code / 關鍵字…" value="{{searchQuery}}" onChange="{{onSearchChange}}" style="flex:1;max-width:420px;background:oklch(0.24 0.012 260);border:1px solid oklch(0.34 0.012 260);color:oklch(0.93 0.006 260);padding:9px 12px;border-radius:6px;font-size:13px;outline:none;" />
     <sc-if value="{{hasData}}" hint-placeholder-val="{{false}}">
       <div style="display:flex;gap:8px;flex-shrink:0;">
@@ -229,7 +232,7 @@
 
         <sc-if value="{{isListView}}" hint-placeholder-val="{{false}}">
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px;">
-            <div style="font-size:14px;font-weight:700;">{{listTitle}}（{{visibleGroups.length}} 筆彙整）</div>
+            <div style="font-size:14px;font-weight:700;">{{listTitle}}（{{visibleTotal}} 筆彙整）</div>
             <sc-if value="{{hasLowPriority}}" hint-placeholder-val="{{false}}">
               <div onClick="{{toggleLowPriority}}" title="登入、BGP/LSP 一般訊息、kernel 等例行訊息；中斷類與 Critical 以上事件不會被收起" style="{{lowPriorityStyle}}">{{lowPriorityLabel}}</div>
             </sc-if>
@@ -261,16 +264,23 @@
               <div style="font-size:15px;font-weight:700;color:oklch(0.7 0.01 260);flex-shrink:0;">×{{g.count}}</div>
             </div>
           </sc-for>
+          <sc-if value="{{hasMore}}" hint-placeholder-val="{{false}}">
+            <div onClick="{{showMore}}" style="margin:12px 0;text-align:center;padding:9px;border:1px dashed oklch(0.38 0.012 260);border-radius:6px;font-size:12.5px;color:oklch(0.75 0.1 235);cursor:pointer;">{{moreLabel}}</div>
+          </sc-if>
         </sc-if>
 
         <sc-if value="{{isSeenView}}" hint-placeholder-val="{{false}}">
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 6px;">
             <div style="font-size:14px;font-weight:700;">👁 已看紀錄（{{seenTotal}} 筆）</div>
+            <button onClick="{{exportBackup}}" title="把已看紀錄和你的歷史案例存成檔案，可在別台電腦匯入" style="background:oklch(0.24 0.012 260);border:1px solid oklch(0.34 0.012 260);color:oklch(0.9 0.006 260);padding:4px 10px;border-radius:6px;font-size:11.5px;cursor:pointer;">⬇ 匯出備份</button>
+            <label title="匯入之前匯出的備份檔，會和目前的紀錄合併" style="background:oklch(0.24 0.012 260);border:1px solid oklch(0.34 0.012 260);color:oklch(0.9 0.006 260);padding:4px 10px;border-radius:6px;font-size:11.5px;cursor:pointer;">⬆ 匯入備份
+              <input type="file" accept=".json,application/json" onChange="{{importBackup}}" style="display:none;" />
+            </label>
             <sc-if value="{{hasSeen}}" hint-placeholder-val="{{false}}">
               <button onClick="{{clearSeen}}" style="background:transparent;border:1px solid oklch(0.62 0.21 25 / 0.5);color:oklch(0.78 0.15 25);padding:4px 10px;border-radius:6px;font-size:11.5px;cursor:pointer;">清除全部紀錄</button>
             </sc-if>
           </div>
-          <div style="font-size:11.5px;color:oklch(0.58 0.01 260);margin:0 0 12px;line-height:1.6;">點過的日誌會記在這裡（存在這台電腦的瀏覽器），之後不會再出現在清單中；在上方搜尋框搜尋時仍會顯示。若同一則訊息之後又有「更新的」發生紀錄，會自動重新出現。按「取消」可讓它重新顯示。</div>
+          <div style="font-size:11.5px;color:oklch(0.58 0.01 260);margin:0 0 12px;line-height:1.6;">點過的日誌會記在這裡（存在這台電腦的瀏覽器），之後不會再出現在清單中；在上方搜尋框搜尋時仍會顯示。若同一則訊息之後又有「更新的」發生紀錄，會自動重新出現。按「取消」可讓它重新顯示。換電腦或換瀏覽器時，用「匯出備份 / 匯入備份」搬移紀錄（含 {{customHistCount}} 筆你的歷史案例）。</div>
           <sc-for list="{{seenList}}" as="s" hint-placeholder-count="5">
             <div onClick="{{s.open}}" style="{{s.rowStyle}}">
               <div style="width:4px;align-self:stretch;border-radius:2px;background:{{s.sevColor}};flex-shrink:0;"></div>
@@ -338,10 +348,27 @@
             <sc-if value="{{selectedGroup.histFound}}" hint-placeholder-val="{{false}}">
               <div style="margin-top:6px;display:flex;flex-direction:column;gap:3px;">
                 <sc-for list="{{selectedGroup.histCases}}" as="hc" hint-placeholder-count="2">
-                  <div style="font-size:11px;color:oklch(0.65 0.01 260);font-family:ui-monospace,Menlo,Consolas,monospace;">{{hc.date}}　{{hc.hostname}}</div>
+                  <div style="display:flex;gap:8px;align-items:flex-start;">
+                    <div style="flex:1;min-width:0;">
+                      <div style="font-size:11px;color:oklch(0.65 0.01 260);font-family:ui-monospace,Menlo,Consolas,monospace;">{{hc.date}}　{{hc.hostname}}<sc-if value="{{hc.isCustom}}" hint-placeholder-val="{{false}}"><span style="font-family:inherit;margin-left:6px;font-size:10px;padding:0 6px;border-radius:8px;background:oklch(0.68 0.14 235 / 0.2);color:oklch(0.8 0.1 235);">我的紀錄</span></sc-if></div>
+                      <sc-if value="{{hc.note}}" hint-placeholder-val="{{false}}"><div style="font-size:11.5px;line-height:1.6;color:oklch(0.82 0.006 260);white-space:pre-wrap;">{{hc.note}}</div></sc-if>
+                    </div>
+                    <sc-if value="{{hc.isCustom}}" hint-placeholder-val="{{false}}"><button onClick="{{hc.remove}}" style="background:transparent;border:none;color:oklch(0.6 0.01 260);font-size:11px;cursor:pointer;padding:0 2px;">刪除</button></sc-if>
+                  </div>
                 </sc-for>
               </div>
             </sc-if>
+            <details style="margin-top:8px;">
+              <summary style="font-size:11.5px;color:oklch(0.75 0.1 235);cursor:pointer;">＋ 新增我的處理紀錄</summary>
+              <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">
+                <div style="display:flex;gap:6px;">
+                  <input type="date" value="{{histDate}}" onChange="{{onHistDate}}" style="flex:0 0 auto;background:oklch(0.24 0.012 260);border:1px solid oklch(0.34 0.012 260);color:oklch(0.9 0.006 260);padding:5px 7px;border-radius:5px;font-size:11.5px;color-scheme:dark;" />
+                  <input placeholder="設備名稱" value="{{histHost}}" onChange="{{onHistHost}}" style="flex:1;min-width:0;background:oklch(0.24 0.012 260);border:1px solid oklch(0.34 0.012 260);color:oklch(0.9 0.006 260);padding:5px 7px;border-radius:5px;font-size:11.5px;" />
+                </div>
+                <textarea placeholder="原因、怎麼處理、結果…（之後任何設備出現同樣訊息都會顯示這筆）" value="{{histNote}}" onChange="{{onHistNote}}" rows="3" style="background:oklch(0.24 0.012 260);border:1px solid oklch(0.34 0.012 260);color:oklch(0.9 0.006 260);padding:6px 8px;border-radius:5px;font-size:11.5px;resize:vertical;font-family:inherit;"></textarea>
+                <button onClick="{{addHistCase}}" style="align-self:flex-start;background:oklch(0.68 0.14 235);color:oklch(0.15 0.01 260);border:none;font-weight:600;padding:5px 12px;border-radius:5px;font-size:11.5px;cursor:pointer;">儲存</button>
+              </div>
+            </details>
           </div>
 
           <div style="margin-bottom:16px;">
@@ -389,7 +416,7 @@
     <div style="flex:1;display:flex;align-items:center;justify-content:center;">
       <div style="text-align:center;max-width:520px;">
         <sc-if value="{{loading}}" hint-placeholder-val="{{false}}">
-          <div style="font-size:15px;color:oklch(0.7 0.01 260);">解析日誌中…</div>
+          <div style="font-size:15px;color:oklch(0.7 0.01 260);">解析日誌中… {{progressText}}</div>
         </sc-if>
         <sc-if value="{{!loading}}" hint-placeholder-val="{{true}}">
           <div style="font-size:18px;font-weight:700;margin-bottom:10px;">上傳 Juniper 設備日誌開始分析</div>
@@ -424,18 +451,32 @@ const URGENT_RULES = [
   { re: /fabric|train rx failed|parity|ecc|uncorrectable|fatal/i, reason: '交換結構/晶片錯誤' },
   { re: /(pem|power supply|fan).*(fail|absent)|temperature.*(high|hot|exceed)|overheat/i, reason: '電源/風扇/溫度' },
 ];
+// 結果快取在 group 上（g._urg / g._ign），大量日誌時不用每次重算正規表示式
 function urgentReason(g){
+  if (g._urg !== undefined) return g._urg || null;
+  const r = urgentReasonRaw(g);
+  g._urg = r || '';
+  return r;
+}
+function urgentReasonRaw(g){
   if (isIgnored(g)) return null;
   const text = [g.sample, g.tag, g.eventType].filter(Boolean).join(' ');
   for (const r of URGENT_RULES) if (r.re.test(text) && !(r.not && r.not.test(text))) return r.reason;
   if (g.severity <= 2) return SEV_NAME[g.severity] + ' 等級';
   return null;
 }
+const LIST_PAGE = 300;   // 清單一次最多顯示幾筆，太多會讓畫面變慢
 const KEEP_RE = /i2c|pcf/i;
 // 即使符合 IGNORE_RE 也一定要顯示的重要事件（鄰居/LSP 中斷、當機等）
 const IMPORTANT_RE = /\bdown\b|from established|->\s*idle|to idle|went down|panic|crash|core[- ]?dump|vmcore/i;
 // 「低優先」：例行雜訊（登入、BGP/LSP 一般訊息、kernel 等），預設收起，可在清單上方打開
 function isIgnored(g){
+  if (g._ign !== undefined) return g._ign;
+  const r = isIgnoredRaw(g);
+  g._ign = r;
+  return r;
+}
+function isIgnoredRaw(g){
   const text = [g.sample, g.tag, g.process, g.module, g.eventType].filter(Boolean).join(' ');
   if (/kernel|%kern/i.test(text) && KEEP_RE.test(text)) return false;
   if (!IGNORE_RE.test(text)) return false;
@@ -515,12 +556,6 @@ function extractDownUpIdentifier(msg){
   if ((m = msg.match(reIp))) return 'ip:' + m[0];
   return null;
 }
-function escXml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function xlCell(type, value){ return '<Cell><Data ss:Type="' + type + '">' + escXml(value) + '</Data></Cell>'; }
-function xlRow(cells){ return '<Row>' + cells.join('') + '</Row>'; }
-function xlSheet(name, headerRow, rows){
-  return '<Worksheet ss:Name="' + escXml(name) + '"><Table>' + xlRow(headerRow.map(h => xlCell('String', h))) + rows.map(r => xlRow(r)).join('') + '</Table></Worksheet>';
-}
 function parseTs(ts){
   const m = ts.match(/^([A-Z][a-z]{2})\s+(\d{1,2})\s+(\d{2}):(\d{2}):(\d{2})/);
   if (!m || MONTHS[m[1]]===undefined) return null;
@@ -586,14 +621,89 @@ const HIST_REF = [
     note: 'mspmand CPU zone 衝高（GREEN=>RED），歷史上曾研判為攻擊流量造成 CPU 使用率飆升，建議保持觀察。',
     cases: [ { date: '2019-12-09', hostname: 'SPC1' } ] },
 ];
-function matchHistory(g){
+// ===== 自訂歷史案例（存在瀏覽器 localStorage）=====
+const HIST_STORE_KEY = 'jla_custom_history_v1';
+function loadCustomHist(){
+  try { const v = JSON.parse(localStorage.getItem(HIST_STORE_KEY) || '[]'); return Array.isArray(v) ? v.filter(c => c && c.sig) : []; }
+  catch { return []; }
+}
+function saveCustomHist(list){ try { localStorage.setItem(HIST_STORE_KEY, JSON.stringify(list)); } catch {} }
+// 「同一種問題」的特徵：不含設備名稱，所以其他設備發生同樣訊息也會比對到
+function histSig(g){ return (g.tag || g.facility || '') + '|' + normalizeMsg(g.sample || '').slice(0, 140); }
+function todayStr(){ const d = new Date(); const p = n => String(n).padStart(2, '0'); return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()); }
+
+function matchHistory(g, custom){
   const raws = (g.raws || [g.sample]).join(' ').toLowerCase();
   const hits = HIST_REF.map(h => ({ h, matched: h.keywords.filter(k => raws.includes(k)) })).filter(x => x.matched.length);
-  if (!hits.length) return { histFound: false, histNote: '查無相符歷史紀錄（此為此份上傳日誌首次出現的事件型態）。', histCases: [], histBadgeLabel: '無先例', histBadgeBg: 'oklch(0.28 0.012 260)', histBadgeColor: 'oklch(0.6 0.01 260)' };
+  const sig = histSig(g);
+  const mine = (custom || []).filter(c => c.sig === sig).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  if (!hits.length && !mine.length) return { histFound: false, histNote: '查無相符歷史紀錄（此為此份上傳日誌首次出現的事件型態）。可在下方新增你自己的處理紀錄。', histCases: [], histBadgeLabel: '無先例', histBadgeBg: 'oklch(0.28 0.012 260)', histBadgeColor: 'oklch(0.6 0.01 260)' };
   const matchedKeywords = [...new Set(hits.flatMap(x => x.matched))];
-  const note = hits.map(x => x.h.note).join(' ');
-  const cases = hits.flatMap(x => x.h.cases);
-  return { histFound: true, histNote: '匹配關鍵字：' + matchedKeywords.join('、') + '。' + note, histCases: cases, histBadgeLabel: '曾發生過（' + matchedKeywords.join('、') + '）', histBadgeBg: 'oklch(0.3 0.1 55 / 0.4)', histBadgeColor: 'oklch(0.75 0.15 55)' };
+  const notes = [];
+  if (hits.length) notes.push('匹配關鍵字：' + matchedKeywords.join('、') + '。' + hits.map(x => x.h.note).join(' '));
+  if (mine.length) notes.push('你記錄過 ' + mine.length + ' 次同樣的訊息。');
+  const cases = [
+    ...mine.map(c => ({ id: c.id, date: c.date || '-', hostname: c.hostname || '-', note: c.note || '', isCustom: true })),
+    ...hits.flatMap(x => x.h.cases).map(c => ({ ...c, note: '', isCustom: false })),
+  ];
+  const badge = [mine.length ? ('我的紀錄 ' + mine.length) : '', matchedKeywords.length ? ('曾發生過（' + matchedKeywords.join('、') + '）') : ''].filter(Boolean).join(' ・ ');
+  return { histFound: true, histNote: notes.join(' '), histCases: cases, histBadgeLabel: badge, histBadgeBg: 'oklch(0.3 0.1 55 / 0.4)', histBadgeColor: 'oklch(0.75 0.15 55)' };
+}
+
+// ===== 匯出 .xlsx（不需外部套件：自己組 Office Open XML + ZIP）=====
+const CRC_TABLE = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(buf){ let c = 0xFFFFFFFF; for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function zipStore(files){
+  const enc = new TextEncoder(); const chunks = []; const central = []; let offset = 0;
+  const u16 = v => [v & 0xFF, (v >>> 8) & 0xFF];
+  const u32 = v => [v & 0xFF, (v >>> 8) & 0xFF, (v >>> 16) & 0xFF, (v >>> 24) & 0xFF];
+  for (const f of files) {
+    const name = enc.encode(f.name); const data = typeof f.data === 'string' ? enc.encode(f.data) : f.data;
+    const crc = crc32(data);
+    const common = [...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0x21), ...u32(crc), ...u32(data.length), ...u32(data.length), ...u16(name.length), ...u16(0)];
+    const local = new Uint8Array([...u32(0x04034b50), ...common]);
+    chunks.push(local, name, data);
+    central.push(new Uint8Array([...u32(0x02014b50), ...u16(20), ...common, ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(offset)]), name);
+    offset += local.length + name.length + data.length;
+  }
+  const cdSize = central.reduce((s, c) => s + c.length, 0);
+  const end = new Uint8Array([...u32(0x06054b50), ...u16(0), ...u16(0), ...u16(files.length), ...u16(files.length), ...u32(cdSize), ...u32(offset), ...u16(0)]);
+  return new Blob([...chunks, ...central, end], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+}
+function xmlEsc(s){ return String(s == null ? '' : s).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function colName(i){ let s = ''; i++; while (i > 0) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; }
+function sheetXml(header, rows){
+  const all = [header, ...rows];
+  const widths = header.map((_, c) => Math.min(70, Math.max(8, ...all.map(r => { const v = String(r[c] == null ? '' : r[c]); let w = 0; for (const ch of v.slice(0, 200)) w += ch.charCodeAt(0) > 255 ? 2 : 1; return w + 2; }))));
+  const cell = (v, r, c, style) => {
+    const ref = colName(c) + r;
+    if (typeof v === 'number' && isFinite(v)) return '<c r="' + ref + '"' + (style ? ' s="' + style + '"' : '') + '><v>' + v + '</v></c>';
+    return '<c r="' + ref + '" t="inlineStr"' + (style ? ' s="' + style + '"' : '') + '><is><t xml:space="preserve">' + xmlEsc(String(v == null ? '' : v).slice(0, 32000)) + '</t></is></c>';
+  };
+  const rowsXml = all.map((r, ri) => '<row r="' + (ri + 1) + '">' + r.map((v, ci) => cell(v, ri + 1, ci, ri === 0 ? 1 : 0)).join('') + '</row>').join('');
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+    + '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'
+    + '<cols>' + widths.map((w, i) => '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>').join('') + '</cols>'
+    + '<sheetData>' + rowsXml + '</sheetData>'
+    + (all.length > 1 ? '<autoFilter ref="A1:' + colName(header.length - 1) + all.length + '"/>' : '')
+    + '</worksheet>';
+}
+function buildXlsx(sheets){
+  const files = [];
+  files.push({ name: '[Content_Types].xml', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' + sheets.map((_, i) => '<Override PartName="/xl/worksheets/sheet' + (i + 1) + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>').join('') + '</Types>' });
+  files.push({ name: '_rels/.rels', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>' });
+  files.push({ name: 'xl/workbook.xml', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>' + sheets.map((s, i) => '<sheet name="' + xmlEsc(s.name.replace(/[\\\/?*\[\]:]/g, '_').slice(0, 31)) + '" sheetId="' + (i + 1) + '" r:id="rId' + (i + 1) + '"/>').join('') + '</sheets>' + (sheets.some(s => s.rows.length) ? '<definedNames>' + sheets.map((s, i) => s.rows.length ? '<definedName name="_xlnm._FilterDatabase" localSheetId="' + i + '" hidden="1">\'' + xmlEsc(s.name.replace(/[\\\/?*\[\]:]/g, '_').slice(0, 31)).replace(/'/g, "''") + '\'!$A$1:$' + colName(s.header.length - 1) + '$' + (s.rows.length + 1) + '</definedName>' : '').join('') + '</definedNames>' : '') + '</workbook>' });
+  files.push({ name: 'xl/_rels/workbook.xml.rels', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + sheets.map((_, i) => '<Relationship Id="rId' + (i + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' + (i + 1) + '.xml"/>').join('') + '<Relationship Id="rId' + (sheets.length + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>' });
+  files.push({ name: 'xl/styles.xml', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFD9E1F2"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>' });
+  sheets.forEach((s, i) => files.push({ name: 'xl/worksheets/sheet' + (i + 1) + '.xml', data: sheetXml(s.header, s.rows) }));
+  return zipStore(files);
+}
+function downloadBlob(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 const CLI_REF_LINK = 'https://www.juniper.net/documentation/us/en/software/junos/topic-map/operational-commands.html';
 const CLI_CMDS = {
@@ -730,7 +840,63 @@ function kbReference(g){
 }
 
 class Component extends DCLogic {
-  state = { rawFiles: [], loading: false, groups: {}, devices: {}, dayCounts: {}, moduleCounts: {}, severityTotals: {}, totalEntries: 0, totalLines: 0, downUpEvents: [], view: {kind:'dashboard'}, selectedKey: null, searchQuery: '', leftWidth: 200, rightWidth: 320, dragging: null, seen: loadSeen() };
+  state = { rawFiles: [], loading: false, groups: {}, devices: {}, dayCounts: {}, moduleCounts: {}, severityTotals: {}, totalEntries: 0, totalLines: 0, downUpEvents: [], view: {kind:'dashboard'}, selectedKey: null, searchQuery: '', leftWidth: 200, rightWidth: 320, dragging: null, seen: loadSeen(), customHist: loadCustomHist(), histDate: todayStr(), histHost: '', histNote: '', listLimit: LIST_PAGE };
+
+  // ===== 自訂歷史案例 =====
+  historyFor = (g) => {
+    const h = matchHistory(g, this.state.customHist);
+    h.histCases = h.histCases.map(c => ({ ...c, remove: c.isCustom ? () => this.removeHistCase(c.id) : null }));
+    return h;
+  };
+  onHistDate = (e) => { this.setState({ histDate: e.target.value }); };
+  onHistHost = (e) => { this.setState({ histHost: e.target.value }); };
+  onHistNote = (e) => { this.setState({ histNote: e.target.value }); };
+  addHistCase = () => {
+    const g = (this.state.groups || {})[this.state.selectedKey];
+    if (!g) return;
+    const note = (this.state.histNote || '').trim();
+    if (!note) { window.alert('請先填寫處理說明（例如：原因、怎麼處理、結果）。'); return; }
+    const item = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7), sig: histSig(g), eventType: g.eventType, sample: g.sample.slice(0, 300), date: this.state.histDate || todayStr(), hostname: (this.state.histHost || '').trim() || g.hostname, note, createdAt: Date.now() };
+    const customHist = [...(this.state.customHist || []), item];
+    saveCustomHist(customHist);
+    this.setState({ customHist, histNote: '' });
+  };
+  removeHistCase = (id) => {
+    if (!window.confirm('確定刪除這筆歷史案例？')) return;
+    const customHist = (this.state.customHist || []).filter(c => c.id !== id);
+    saveCustomHist(customHist);
+    this.setState({ customHist });
+  };
+
+  // ===== 備份 / 還原（已看紀錄 + 自訂歷史案例），換電腦或換瀏覽器時使用 =====
+  exportBackup = () => {
+    const data = { app: 'juniper-log-analyzer', version: 1, exportedAt: new Date().toISOString(), seen: this.state.seen || {}, customHistory: this.state.customHist || [] };
+    downloadBlob(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), 'juniper_log_backup_' + todayStr() + '.json');
+  };
+  importBackup = (e) => {
+    const input = e.target; const file = input.files && input.files[0];
+    if (!file) return;
+    file.text().then(text => {
+      input.value = '';
+      let data;
+      try { data = JSON.parse(text); } catch { window.alert('這不是有效的備份檔（JSON 格式錯誤）。'); return; }
+      if (!data || data.app !== 'juniper-log-analyzer') { window.alert('這不是本工具匯出的備份檔。'); return; }
+      const seen = { ...(this.state.seen || {}) }; let addedSeen = 0;
+      const inSeen = data.seen && typeof data.seen === 'object' && !Array.isArray(data.seen) ? data.seen : {};
+      for (const [k, v] of Object.entries(inSeen)) {
+        if (!v || typeof v !== 'object') continue;
+        const cur = seen[k];
+        if (!cur) { seen[k] = v; addedSeen++; }
+        else if ((v.lastLog || 0) > (cur.lastLog || 0) || ((v.lastLog || 0) === (cur.lastLog || 0) && (v.seenAt || 0) > (cur.seenAt || 0))) seen[k] = v;
+      }
+      const ids = new Set((this.state.customHist || []).map(c => c.id));
+      const newHist = (Array.isArray(data.customHistory) ? data.customHistory : []).filter(c => c && c.sig && c.id && !ids.has(c.id));
+      const customHist = [...(this.state.customHist || []), ...newHist];
+      saveSeen(seen); saveCustomHist(customHist);
+      this.setState({ seen, customHist });
+      window.alert('匯入完成：新增 ' + addedSeen + ' 筆已看紀錄、' + newHist.length + ' 筆歷史案例。');
+    });
+  };
 
   markSeen = (key) => {
     const g = (this.state.groups || {})[key];
@@ -755,7 +921,7 @@ class Component extends DCLogic {
     saveSeen({});
     this.setState({ seen: {} });
   };
-  selectSeenHistory = () => { this.setState({ view: { kind: 'seen' }, selectedKey: null, searchQuery: '' }); };
+  selectSeenHistory = () => { this.setState({ view: { kind: 'seen' }, selectedKey: null, searchQuery: '', listLimit: LIST_PAGE }); };
 
   componentDidMount(){
     window.addEventListener('mousemove', this.handleDragMove);
@@ -778,27 +944,36 @@ class Component extends DCLogic {
   handleDragEnd = () => { if (this.state.dragging) this.setState({ dragging: null }); };
 
   handleFiles = (e) => {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
-    this.setState({ loading: true });
+    const input = e.target;
+    const files = Array.from(input.files || []);
+    if (!files.length || this.state.loading) return;
+    this.setState({ loading: true, progress: 0 });
     Promise.all(files.map(f => f.text().then(t => ({ name: f.name, text: t }))))
-      .then(results => { setTimeout(() => this.processFiles(results), 30); });
+      .then(results => { input.value = ''; return this.processFiles(results); })
+      .catch(err => { console.error(err); window.alert('解析失敗：' + (err && err.message || err)); this.setState({ loading: false }); });
   };
 
-  processFiles = (results) => {
-    const rawFiles = [...(this.state.rawFiles || []), ...results];
-    const parsed = this.parseAll(rawFiles);
-    this.setState({ rawFiles, ...parsed, loading: false, view: { kind: 'dashboard' }, selectedKey: null });
+  // 只解析「新加入」的檔案，合併到已經解析好的結果（不再每次全部重來）
+  processFiles = async (results) => {
+    const st = this.state;
+    const prev = (st.rawFiles || []).length ? { groups: st.groups, devices: st.devices, dayCounts: st.dayCounts, moduleCounts: st.moduleCounts, severityTotals: st.severityTotals, totalEntries: st.totalEntries, totalLines: st.totalLines, duTracker: st.duTracker } : null;
+    const parsed = await this.parseAll(results, prev, (p) => this.setState({ progress: p }));
+    // 只保留檔名與大小，不把整份檔案內容留在記憶體
+    const rawFiles = [...(st.rawFiles || []), ...results.map(r => ({ name: r.name, size: r.text.length }))];
+    this.setState({ rawFiles, ...parsed, loading: false, progress: 0, view: { kind: 'dashboard' }, selectedKey: null, listLimit: LIST_PAGE });
   };
 
   resetAll = () => {
-    this.setState({ rawFiles: [], loading: false, groups: {}, devices: {}, dayCounts: {}, moduleCounts: {}, severityTotals: {}, totalEntries: 0, totalLines: 0, downUpEvents: [], view: { kind: 'dashboard' }, selectedKey: null, searchQuery: '' });
+    this.setState({ rawFiles: [], loading: false, groups: {}, devices: {}, dayCounts: {}, moduleCounts: {}, severityTotals: {}, totalEntries: 0, totalLines: 0, downUpEvents: [], duTracker: {}, view: { kind: 'dashboard' }, selectedKey: null, searchQuery: '', listLimit: LIST_PAGE });
   };
 
-  parseAll = (rawFiles) => {
-    const groups = {}, devices = {}, dayCounts = {}, moduleCounts = {}, severityTotals = { critical:0, error:0, warning:0, notice:0 };
-    const duTracker = {};
-    let totalEntries = 0, totalLines = 0;
+  parseAll = async (rawFiles, prev, onProgress) => {
+    const groups = prev ? prev.groups : {}, devices = prev ? prev.devices : {}, dayCounts = prev ? prev.dayCounts : {}, moduleCounts = prev ? prev.moduleCounts : {};
+    const severityTotals = prev ? prev.severityTotals : { critical:0, error:0, warning:0, notice:0 };
+    const duTracker = prev ? (prev.duTracker || {}) : {};
+    let totalEntries = prev ? prev.totalEntries : 0, totalLines = prev ? prev.totalLines : 0;
+    const totalChars = Math.max(1, rawFiles.reduce((s, f) => s + f.text.length, 0));
+    let doneChars = 0, sinceYield = 0, lastYield = Date.now();
 
     const finalizeDeviceBlock = (mode, host, version, buffer) => {
       if (!host) return;
@@ -842,6 +1017,16 @@ class Component extends DCLogic {
       let currentHost = null, currentVersion = null, mode = null, buffer = [], bufferHost = null;
       for (const line of lines) {
         totalLines++;
+        doneChars += line.length + 1;
+        // 每處理一段就讓瀏覽器喘口氣，畫面不會卡死，並更新進度
+        if (++sinceYield >= 4000) {
+          sinceYield = 0;
+          if (Date.now() - lastYield > 60) {
+            if (onProgress) onProgress(Math.min(99, Math.round(doneChars / totalChars * 100)));
+            await new Promise(r => setTimeout(r, 0));
+            lastYield = Date.now();
+          }
+        }
         const pm = line.match(rePrompt);
         if (pm) currentHost = pm[1];
         const vm = line.match(/---\s*JUNOS\s+(\S+)/);
@@ -918,6 +1103,7 @@ class Component extends DCLogic {
           g = groups[key] = { key, hostname: entry.hostname, module: entry.module, eventType: entry.eventType, tag: entry.tag, facility: entry.facility, severity: entry.severity, severityName: entry.severityName, count: 0, first: null, last: null, sample: entry.message, keywords: new Set(), raws: [], pid: '', iface: '', ip: '' };
         }
         g.count++;
+        g._ign = undefined; g._urg = undefined;   // 清除快取（內容可能改變）
         if (entry.date && (!g.first || entry.date < g.first)) g.first = entry.date;
         if (entry.date && (!g.last || entry.date > g.last)) g.last = entry.date;
         if (entry.severity < g.severity) { g.severity = entry.severity; g.severityName = entry.severityName; }
@@ -946,19 +1132,23 @@ class Component extends DCLogic {
     });
     downUpEvents.sort((a, b) => (a.recovered === b.recovered ? (b.downLast - a.downLast) : (a.recovered ? 1 : -1)));
 
-    return { groups, devices, dayCounts, moduleCounts, severityTotals, totalEntries, totalLines, downUpEvents };
+    return { groups: { ...groups }, devices: { ...devices }, dayCounts: { ...dayCounts }, moduleCounts: { ...moduleCounts }, severityTotals: { ...severityTotals }, totalEntries, totalLines, downUpEvents, duTracker };
   };
 
-  onSearchChange = (e) => { this.setState({ searchQuery: e.target.value }); };
-  selectDashboard = () => { this.setState({ view: { kind: 'dashboard' }, selectedKey: null, searchQuery: '' }); };
-  selectDevices = () => { this.setState({ view: { kind: 'devices' }, selectedKey: null, searchQuery: '' }); };
-  selectAlertError = () => { this.setState({ view: { kind: 'severity', severities: [0, 1, 2, 3] }, selectedKey: null, searchQuery: '' }); };
-  selectCpuMem = () => { this.setState({ view: { kind: 'cpumem' }, selectedKey: null, searchQuery: '' }); };
+  onSearchChange = (e) => { this.setState({ searchQuery: e.target.value, listLimit: LIST_PAGE }); };
+  selectDashboard = () => { this.setState({ view: { kind: 'dashboard' }, selectedKey: null, searchQuery: '', listLimit: LIST_PAGE }); };
+  selectDevices = () => { this.setState({ view: { kind: 'devices' }, selectedKey: null, searchQuery: '', listLimit: LIST_PAGE }); };
+  selectAlertError = () => { this.setState({ view: { kind: 'severity', severities: [0, 1, 2, 3] }, selectedKey: null, searchQuery: '', listLimit: LIST_PAGE }); };
+  selectCpuMem = () => { this.setState({ view: { kind: 'cpumem' }, selectedKey: null, searchQuery: '', listLimit: LIST_PAGE }); };
   toggleLowPriority = () => { this.setState(s => ({ showLowPriority: !s.showLowPriority })); };
   toggleCmOnlyOver = () => { this.setState(s => ({ cmOnlyOver: !s.cmOnlyOver })); };
-  selectUrgent = () => { this.setState({ view: { kind: 'urgent' }, selectedKey: null, searchQuery: '' }); };
-  selectModule = (name) => { this.setState({ view: { kind: 'module', module: name }, selectedKey: null, searchQuery: '' }); };
-  selectGroup = (key) => { this.setState({ selectedKey: key }); this.markSeen(key); };
+  selectUrgent = () => { this.setState({ view: { kind: 'urgent' }, selectedKey: null, searchQuery: '', listLimit: LIST_PAGE }); };
+  selectModule = (name) => { this.setState({ view: { kind: 'module', module: name }, selectedKey: null, searchQuery: '', listLimit: LIST_PAGE }); };
+  selectGroup = (key) => {
+    const g = (this.state.groups || {})[key];
+    this.setState({ selectedKey: key, histHost: g ? g.hostname : '', histDate: todayStr(), histNote: '' });
+    this.markSeen(key);
+  };
 
   computeVisibleGroups = () => {
     const { groups, view, searchQuery, selectedKey } = this.state;
@@ -994,43 +1184,23 @@ class Component extends DCLogic {
   };
 
   exportExcel = () => {
-    const groups = Object.values(this.state.groups || {}).sort((a, b) => a.severity - b.severity || (b.last || 0) - (a.last || 0) || b.count - a.count);
-    const errRows = groups.map(g => [
-      xlCell('String', g.hostname), xlCell('String', g.severityName), xlCell('String', g.module), xlCell('String', g.eventType),
-      xlCell('String', g.tag || '-'), xlCell('Number', g.count), xlCell('String', fmtDT(g.first)), xlCell('String', fmtDT(g.last)),
-      xlCell('String', g.iface || '-'), xlCell('String', g.ip || '-'), xlCell('String', g.sample),
-      xlCell('String', isSeenGroup(g, this.state.seen || {}) ? '是' : '否'),
+    const st = this.state;
+    const seen = st.seen || {};
+    const groups = Object.values(st.groups || {}).sort((a, b) => a.severity - b.severity || (b.last || 0) - (a.last || 0) || b.count - a.count);
+    const errRows = groups.map(g => [g.hostname, g.severityName, g.module, g.eventType, g.tag || '-', g.count, fmtDT(g.first), fmtDT(g.last), g.iface || '-', g.ip || '-', urgentReason(g) || '', isIgnored(g) ? '是' : '否', isSeenGroup(g, seen) ? '是' : '否', g.sample]);
+    const devices = Object.values(st.devices || {}).sort((a, b) => a.hostname.localeCompare(b.hostname));
+    const devRows = devices.map(d => [d.hostname, d.version || '-', d.model || '-', d.cpuUsage || '-', d.memUsage || '-', d.alarmCount ?? 0, d.errorCount || 0]);
+    const duRows = (st.downUpEvents || []).map(e => [e.hostname, e.identifier, fmtDT(e.downFirst), fmtDT(e.downLast), e.downCount, e.recovered ? '是' : '否', e.recovered ? fmtDT(e.upAt) : '-', e.downSample || '', e.upSample || '']);
+    const seenRows = Object.values(seen).sort((a, b) => (b.seenAt || 0) - (a.seenAt || 0)).map(s => [fmtFull(s.seenAt), s.hostname || '-', s.severityName || '-', s.eventType || '-', s.count || 0, fmtFull(s.lastLog), s.sample || '']);
+    const histRows = (st.customHist || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date))).map(c => [c.date || '-', c.hostname || '-', c.eventType || '-', c.note || '', c.sample || '']);
+    const blob = buildXlsx([
+      { name: 'Error Log', header: ['Hostname','Severity','Module','EventType','Tag','Count','First','Last','Interface','IP','緊急原因','低優先','已看過','Message'], rows: errRows },
+      { name: 'CPU_Memory Usage', header: ['Hostname','Version','Model','CPU Usage','Memory Usage','Alarm Count','Error Count'], rows: devRows },
+      { name: 'Down-Up Events', header: ['Hostname','識別(介面/Session/Slot/IP)','Down 首次','Down 最後','次數','是否恢復Up','Up 時間','Down 樣本訊息','Up 樣本訊息'], rows: duRows },
+      { name: '已看紀錄', header: ['看過時間','Hostname','Severity','EventType','當時次數','當時最後發生','Message'], rows: seenRows },
+      { name: '我的歷史案例', header: ['日期','Hostname','EventType','處理說明','訊息'], rows: histRows },
     ]);
-    const errSheet = xlSheet('Error Log', ['Hostname','Severity','Module','EventType','Tag','Count','First','Last','Interface','IP','Message','已看過'], errRows);
-    const seenRows = Object.values(this.state.seen || {}).sort((a, b) => (b.seenAt || 0) - (a.seenAt || 0)).map(s => [
-      xlCell('String', fmtFull(s.seenAt)), xlCell('String', s.hostname || '-'), xlCell('String', s.severityName || '-'), xlCell('String', s.eventType || '-'),
-      xlCell('Number', s.count || 0), xlCell('String', fmtFull(s.lastLog)), xlCell('String', s.sample || ''),
-    ]);
-    const seenSheet = xlSheet('已看紀錄', ['看過時間','Hostname','Severity','EventType','當時次數','當時最後發生','Message'], seenRows);
-
-    const devices = Object.values(this.state.devices || {}).sort((a, b) => a.hostname.localeCompare(b.hostname));
-    const devRows = devices.map(d => [
-      xlCell('String', d.hostname), xlCell('String', d.version || '-'), xlCell('String', d.model || '-'),
-      xlCell('String', d.cpuUsage || '-'), xlCell('String', d.memUsage || '-'), xlCell('Number', d.alarmCount ?? 0), xlCell('Number', d.errorCount || 0),
-    ]);
-    const devSheet = xlSheet('CPU_Memory Usage', ['Hostname','Version','Model','CPU Usage','Memory Usage','Alarm Count','Error Count'], devRows);
-
-    const duRows = (this.state.downUpEvents || []).map(e => [
-      xlCell('String', e.hostname), xlCell('String', e.identifier), xlCell('String', fmtDT(e.downFirst)), xlCell('String', fmtDT(e.downLast)),
-      xlCell('Number', e.downCount), xlCell('String', e.recovered ? '是' : '否'), xlCell('String', e.recovered ? fmtDT(e.upAt) : '-'),
-      xlCell('String', e.downSample || ''), xlCell('String', e.upSample || ''),
-    ]);
-    const duSheet = xlSheet('Down-Up Events', ['Hostname','識別(介面/Session/Slot/IP)','Down 首次','Down 最後','次數','是否恢復Up','Up 時間','Down 樣本訊息','Up 樣本訊息'], duRows);
-
-    const xml = '<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?>'
-      + '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">'
-      + errSheet + devSheet + duSheet + seenSheet + '</Workbook>';
-    const blob = new Blob([xml], { type: 'application/vnd.ms-excel' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'juniper_log_analysis.xls';
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    downloadBlob(blob, 'juniper_log_analysis_' + todayStr() + '.xlsx');
   };
 
   renderVals() {
@@ -1050,27 +1220,32 @@ class Component extends DCLogic {
     const seen = st.seen || {};
     const notSeen = (g) => g.key === st.selectedKey || !isSeenGroup(g, seen);
 
+    // 清單用：只算畫面上需要的欄位（輕量）
     const decorateGroup = (g) => ({
       urgentReason: urgentReason(g) || '',
       ...g,
       isSeen: !!seen[g.key],
       isLowPriority: isIgnored(g),
       seenLabel: seen[g.key] ? ('✓ 已看過 ' + fmtFull(seen[g.key].seenAt)) : '',
-      keywordList: [...g.keywords],
       sevColor: sevColor(g.severity),
       isStorm: g.count >= 5,
       timeRange: fmtDT(g.first) + ' → ' + fmtDT(g.last),
+      select: () => this.selectGroup(g.key),
+      rowStyle: 'display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-bottom:1px solid oklch(0.25 0.012 260);cursor:pointer;opacity:' + (seen[g.key] && st.selectedKey !== g.key ? '0.6' : '1') + ';background:' + (st.selectedKey === g.key ? 'oklch(0.26 0.02 235)' : 'transparent') + ';',
+    });
+    // 詳情面板用：只有選到的那一筆才計算參考資料（較重）
+    const decorateDetail = (g) => ({
+      ...decorateGroup(g),
+      keywordList: [...g.keywords],
       tagDisplay: (g.facility || '-') + (g.tag ? ('-' + g.tag) : ''),
       pidDisplay: g.pid || '-',
       ifDisplay: g.iface || '-',
       ipDisplay: g.ip || '-',
       note: suggestNote(g),
       ...kbReference(g),
-      ...matchHistory(g),
+      ...this.historyFor(g),
       ...cliReference(g),
       ...bookReference(g),
-      select: () => this.selectGroup(g.key),
-      rowStyle: 'display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-bottom:1px solid oklch(0.25 0.012 260);cursor:pointer;opacity:' + (seen[g.key] && st.selectedKey !== g.key ? '0.6' : '1') + ';background:' + (st.selectedKey === g.key ? 'oklch(0.26 0.02 235)' : 'transparent') + ';',
       raws: (() => {
         const ident = extractDownUpIdentifier(g.sample);
         if (!ident) return g.raws;
@@ -1081,7 +1256,11 @@ class Component extends DCLogic {
       })(),
     });
 
-    const visibleGroups = this.computeVisibleGroups().map(decorateGroup);
+    const allVisible = this.computeVisibleGroups();
+    const listLimit = st.listLimit || LIST_PAGE;
+    const visibleGroups = allVisible.slice(0, listLimit).map(decorateGroup);
+    const visibleTotal = allVisible.length;
+    const moreCount = Math.max(0, visibleTotal - visibleGroups.length);
 
     const modules = Object.entries(st.moduleCounts || {}).sort((a, b) => b[1].total - a[1].total).map(([name, c]) => ({
       name, count: c.total,
@@ -1181,7 +1360,7 @@ class Component extends DCLogic {
       viewCount: s.viewCount || 1,
       inCurrent: !!groupsObj[key],
       sevColor: sevColor(({ Emergency:0, Alert:1, Critical:2, Error:3, Warning:4 })[s.severityName] ?? 5),
-      open: () => { if (groupsObj[key]) this.setState({ selectedKey: key }); },
+      open: () => { if (groupsObj[key]) this.selectGroup(key); },
       unmark: (e) => { if (e && e.stopPropagation) e.stopPropagation(); this.unmarkSeen(key); },
       rowStyle: 'display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-bottom:1px solid oklch(0.25 0.012 260);cursor:' + (groupsObj[key] ? 'pointer' : 'default') + ';background:' + (st.selectedKey === key ? 'oklch(0.26 0.02 235)' : 'transparent') + ';',
     }));
@@ -1189,10 +1368,14 @@ class Component extends DCLogic {
     const lowPriorityCount = Object.values(groupsObj).filter(g => isIgnored(g) && notSeen(g)).length;
 
     const selectedGroupRaw = st.selectedKey ? groupsObj[st.selectedKey] : null;
-    const selectedGroup = selectedGroupRaw ? decorateGroup(selectedGroupRaw) : null;
+    const selectedGroup = selectedGroupRaw ? decorateDetail(selectedGroupRaw) : null;
 
     return {
       hasData, loading: st.loading,
+      progressText: st.loading && st.progress ? (st.progress + '%') : '',
+      visibleTotal, moreCount, hasMore: moreCount > 0,
+      showMore: () => this.setState(s => ({ listLimit: (s.listLimit || LIST_PAGE) + LIST_PAGE })),
+      moreLabel: '再顯示 ' + Math.min(LIST_PAGE, moreCount) + ' 筆（還有 ' + moreCount + ' 筆）',
       searchQuery,
       startDragLeft: this.startDragLeft, startDragRight: this.startDragRight,
       leftPanelStyle: 'width:' + st.leftWidth + 'px;flex-shrink:0;border-right:1px solid oklch(0.3 0.012 260);overflow-y:auto;padding:14px 10px;background:oklch(0.185 0.012 260);',
@@ -1210,6 +1393,10 @@ class Component extends DCLogic {
       lowPriorityStyle: 'font-size:11.5px;padding:4px 10px;border-radius:12px;cursor:pointer;white-space:nowrap;border:1px solid ' + (st.showLowPriority ? 'oklch(0.68 0.14 235 / 0.6)' : 'oklch(0.34 0.012 260)') + ';background:' + (st.showLowPriority ? 'oklch(0.68 0.14 235 / 0.18)' : 'oklch(0.25 0.012 260)') + ';color:' + (st.showLowPriority ? 'oklch(0.8 0.1 235)' : 'oklch(0.75 0.01 260)') + ';',
       isSeenView, seenList, seenTotal: seenList.length, hasSeen: seenList.length > 0, noSeen: seenList.length === 0,
       seenHiddenCount, hasSeenHidden: seenHiddenCount > 0,
+      exportBackup: this.exportBackup, importBackup: this.importBackup,
+      customHistCount: (st.customHist || []).length,
+      histDate: st.histDate || '', histHost: st.histHost || '', histNote: st.histNote || '',
+      onHistDate: this.onHistDate, onHistHost: this.onHistHost, onHistNote: this.onHistNote, addHistCase: this.addHistCase,
       selectSeenHistory: this.selectSeenHistory, clearSeen: this.clearSeen,
       seenNavStyle: 'padding:9px 10px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;margin-bottom:4px;background:' + (isSeenView ? 'oklch(0.28 0.02 235)' : 'transparent') + ';',
       deviceCount: Object.keys(devicesObj).length,
