@@ -51,6 +51,10 @@
         <div onClick="{{selectAlertError}}" style="{{alertErrorNavStyle}}">🚨 Alert/Error ({{alertErrorCount}})</div>
         <div onClick="{{selectDevices}}" style="{{devicesNavStyle}}">🖧 設備清單 ({{deviceCount}})</div>
         <div onClick="{{selectCpuMem}}" style="{{cpuMemNavStyle}}"><span>📈 CPU / Memory</span><sc-if value="{{hasCpuMemOver}}" hint-placeholder-val="{{false}}"><span style="font-size:11px;color:oklch(0.8 0.17 25);background:oklch(0.62 0.21 25 / 0.2);border:1px solid oklch(0.62 0.21 25 / 0.45);padding:0 7px;border-radius:9px;">{{cpuMemNavBadge}}</span></sc-if></div>
+        <div onClick="{{selectSeenHistory}}" style="{{seenNavStyle}}">👁 已看紀錄 ({{seenTotal}})</div>
+        <sc-if value="{{hasSeenHidden}}" hint-placeholder-val="{{false}}">
+          <div style="font-size:11px;color:oklch(0.55 0.01 260);padding:2px 10px 0;line-height:1.5;">已隱藏 {{seenHiddenCount}} 筆看過的日誌，搜尋時會再顯示</div>
+        </sc-if>
 
         <div style="font-size:11px;color:oklch(0.55 0.01 260);text-transform:uppercase;letter-spacing:0.5px;margin:16px 4px 6px;">關鍵字快篩</div>
         <div style="display:flex;flex-wrap:wrap;gap:6px;padding:0 4px;">
@@ -239,6 +243,9 @@
                   <sc-if value="{{g.isStorm}}" hint-placeholder-val="{{false}}">
                     <span style="font-size:10.5px;padding:1px 7px;border-radius:10px;background:oklch(0.3 0.012 260);color:oklch(0.78 0.15 95);white-space:nowrap;flex-shrink:0;">🔁 狂跳</span>
                   </sc-if>
+                  <sc-if value="{{g.isSeen}}" hint-placeholder-val="{{false}}">
+                    <span style="font-size:10.5px;padding:1px 7px;border-radius:10px;background:oklch(0.72 0.15 150 / 0.18);color:oklch(0.8 0.13 150);border:1px solid oklch(0.72 0.15 150 / 0.4);white-space:nowrap;flex-shrink:0;">{{g.seenLabel}}</span>
+                  </sc-if>
                 </div>
                 <div style="font-size:12px;color:oklch(0.8 0.006 260);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{g.sample}}</div>
                 <div style="font-size:11px;color:oklch(0.55 0.01 260);margin-top:2px;">{{g.timeRange}}</div>
@@ -246,6 +253,34 @@
               <div style="font-size:15px;font-weight:700;color:oklch(0.7 0.01 260);flex-shrink:0;">×{{g.count}}</div>
             </div>
           </sc-for>
+        </sc-if>
+
+        <sc-if value="{{isSeenView}}" hint-placeholder-val="{{false}}">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 6px;">
+            <div style="font-size:14px;font-weight:700;">👁 已看紀錄（{{seenTotal}} 筆）</div>
+            <sc-if value="{{hasSeen}}" hint-placeholder-val="{{false}}">
+              <button onClick="{{clearSeen}}" style="background:transparent;border:1px solid oklch(0.62 0.21 25 / 0.5);color:oklch(0.78 0.15 25);padding:4px 10px;border-radius:6px;font-size:11.5px;cursor:pointer;">清除全部紀錄</button>
+            </sc-if>
+          </div>
+          <div style="font-size:11.5px;color:oklch(0.58 0.01 260);margin:0 0 12px;line-height:1.6;">點過的日誌會記在這裡（存在這台電腦的瀏覽器），之後不會再出現在清單中；在上方搜尋框搜尋時仍會顯示。若同一則訊息之後又有「更新的」發生紀錄，會自動重新出現。按「取消」可讓它重新顯示。</div>
+          <sc-for list="{{seenList}}" as="s" hint-placeholder-count="5">
+            <div onClick="{{s.open}}" style="{{s.rowStyle}}">
+              <div style="width:4px;align-self:stretch;border-radius:2px;background:{{s.sevColor}};flex-shrink:0;"></div>
+              <div style="flex:1;min-width:0;">
+                <div style="display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center;margin-bottom:3px;">
+                  <span style="font-size:12.5px;font-weight:700;">{{s.hostname}}</span>
+                  <span style="font-size:10.5px;padding:1px 7px;border-radius:10px;background:{{s.sevColor}};color:oklch(0.15 0.01 260);font-weight:700;">{{s.severityName}}</span>
+                  <span style="font-size:10.5px;color:oklch(0.6 0.01 260);">{{s.eventType}}</span>
+                </div>
+                <div style="font-size:12px;color:oklch(0.8 0.006 260);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{s.sample}}</div>
+                <div style="font-size:11px;color:oklch(0.55 0.01 260);margin-top:2px;">看過時間 {{s.seenAtText}} ・ 當時最後發生 {{s.lastLogText}} ・ 當時 ×{{s.count}}</div>
+              </div>
+              <button onClick="{{s.unmark}}" style="background:transparent;border:1px solid oklch(0.34 0.012 260);color:oklch(0.7 0.01 260);padding:3px 9px;border-radius:6px;font-size:11px;cursor:pointer;flex-shrink:0;">取消</button>
+            </div>
+          </sc-for>
+          <sc-if value="{{noSeen}}" hint-placeholder-val="{{false}}">
+            <div style="padding:16px;font-size:12.5px;color:oklch(0.55 0.01 260);">還沒有看過的日誌。在清單中點一筆日誌查看詳情，就會被記錄下來。</div>
+          </sc-if>
         </sc-if>
 
       </div>
@@ -319,7 +354,6 @@
 </x-dc>
 <script type="text/x-dc" data-dc-script>
 
-const YEAR = 2026;
 const MONTHS = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
 const SEV_NAME = {0:'Emergency',1:'Alert',2:'Critical',3:'Error',4:'Warning',5:'Notice',6:'Info',7:'Debug'};
 const IGNORE_RE = /\bauth|login|\blsp\b|kernel|%kern|lacp|\bbgp|alarm clear|host[ _-]?bound|\bfib\b|\brib\b|new time|rsvp|notification|disconnect|sshd/i;
@@ -425,8 +459,31 @@ function xlSheet(name, headerRow, rows){
 function parseTs(ts){
   const m = ts.match(/^([A-Z][a-z]{2})\s+(\d{1,2})\s+(\d{2}):(\d{2}):(\d{2})/);
   if (!m || MONTHS[m[1]]===undefined) return null;
-  return new Date(YEAR, MONTHS[m[1]], Number(m[2]), Number(m[3]), Number(m[4]), Number(m[5]));
+  // syslog 沒有年份：先假設今年，若算出來比現在晚超過 2 天，代表是去年的日誌（例如 1 月看 12 月的 log）
+  const now = new Date();
+  const mk = (y) => new Date(y, MONTHS[m[1]], Number(m[2]), Number(m[3]), Number(m[4]), Number(m[5]));
+  let d = mk(now.getFullYear());
+  if (d - now > 2 * 86400000) d = mk(now.getFullYear() - 1);
+  return d;
 }
+
+// ===== 已看過紀錄（存在瀏覽器 localStorage，關掉網頁也會保留）=====
+const SEEN_STORE_KEY = 'jla_seen_logs_v1';
+function loadSeen(){
+  try { const v = JSON.parse(localStorage.getItem(SEEN_STORE_KEY) || '{}'); return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; }
+  catch { return {}; }
+}
+function saveSeen(seen){
+  try { localStorage.setItem(SEEN_STORE_KEY, JSON.stringify(seen)); } catch {}
+}
+// 已看過、且之後沒有更新的發生紀錄 → 視為已看（隱藏）；若同一訊息有比看過時更新的發生，會重新出現
+function isSeenGroup(g, seen){
+  const s = seen && seen[g.key];
+  if (!s) return false;
+  if (!g.last || !s.lastLog) return true;
+  return g.last.getTime() <= s.lastLog;
+}
+function fmtFull(ms){ if(!ms) return '-'; const d=new Date(ms); const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}/${p(d.getMonth()+1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; }
 function fmtDT(d){ if(!d) return '-'; const p=n=>String(n).padStart(2,'0'); return `${p(d.getMonth()+1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; }
 function suggestNote(g){
   switch(g.eventType){
@@ -608,7 +665,32 @@ function kbReference(g){
 }
 
 class Component extends DCLogic {
-  state = { rawFiles: [], loading: false, groups: {}, devices: {}, dayCounts: {}, moduleCounts: {}, severityTotals: {}, totalEntries: 0, totalLines: 0, downUpEvents: [], view: {kind:'dashboard'}, selectedKey: null, searchQuery: '', leftWidth: 200, rightWidth: 320, dragging: null };
+  state = { rawFiles: [], loading: false, groups: {}, devices: {}, dayCounts: {}, moduleCounts: {}, severityTotals: {}, totalEntries: 0, totalLines: 0, downUpEvents: [], view: {kind:'dashboard'}, selectedKey: null, searchQuery: '', leftWidth: 200, rightWidth: 320, dragging: null, seen: loadSeen() };
+
+  markSeen = (key) => {
+    const g = (this.state.groups || {})[key];
+    if (!g) return;
+    const seen = { ...(this.state.seen || {}) };
+    const prev = seen[key];
+    const lastLog = g.last ? g.last.getTime() : null;
+    // 同一筆已記錄且沒有新發生 → 不重複寫入
+    if (prev && (prev.lastLog || 0) >= (lastLog || 0)) return;
+    seen[key] = { hostname: g.hostname, severityName: g.severityName, eventType: g.eventType, sample: g.sample, count: g.count, lastLog, seenAt: Date.now(), viewCount: (prev ? (prev.viewCount || 1) : 0) + 1 };
+    saveSeen(seen);
+    this.setState({ seen });
+  };
+  unmarkSeen = (key) => {
+    const seen = { ...(this.state.seen || {}) };
+    delete seen[key];
+    saveSeen(seen);
+    this.setState({ seen });
+  };
+  clearSeen = () => {
+    if (!window.confirm('確定要清除全部「已看過」紀錄嗎？清除後所有日誌都會重新顯示。')) return;
+    saveSeen({});
+    this.setState({ seen: {} });
+  };
+  selectSeenHistory = () => { this.setState({ view: { kind: 'seen' }, selectedKey: null, searchQuery: '' }); };
 
   componentDidMount(){
     window.addEventListener('mousemove', this.handleDragMove);
@@ -810,12 +892,15 @@ class Component extends DCLogic {
   toggleCmOnlyOver = () => { this.setState(s => ({ cmOnlyOver: !s.cmOnlyOver })); };
   selectUrgent = () => { this.setState({ view: { kind: 'urgent' }, selectedKey: null, searchQuery: '' }); };
   selectModule = (name) => { this.setState({ view: { kind: 'module', module: name }, selectedKey: null, searchQuery: '' }); };
-  selectGroup = (key) => { this.setState({ selectedKey: key }); };
+  selectGroup = (key) => { this.setState({ selectedKey: key }); this.markSeen(key); };
 
   computeVisibleGroups = () => {
-    const { groups, view, searchQuery } = this.state;
-    let arr = Object.values(groups).filter(g => !isIgnored(g));
+    const { groups, view, searchQuery, selectedKey } = this.state;
+    const seen = this.state.seen || {};
     const q = (searchQuery || '').trim().toLowerCase();
+    // 沒在搜尋時，隱藏已看過的（目前正在看的那筆先留著，換別筆後才消失）
+    const hideSeen = (g) => q || g.key === selectedKey || !isSeenGroup(g, seen);
+    let arr = Object.values(groups).filter(g => !isIgnored(g) && hideSeen(g));
     if (q) {
       arr = arr.filter(g => g.hostname.toLowerCase().includes(q) || g.sample.toLowerCase().includes(q) || (g.tag || '').toLowerCase().includes(q) || g.pid.includes(q) || g.iface.toLowerCase().includes(q) || g.ip.includes(q) || [...g.keywords].some(k => k.includes(q)));
     } else if (view.kind === 'module') {
@@ -827,6 +912,7 @@ class Component extends DCLogic {
     } else if (view.kind === 'linkdown') {
       const open = new Set((this.state.downUpEvents || []).filter(e => !e.recovered).map(e => e.hostname + '|' + e.identifier));
       arr = Object.values(groups).filter(g => {
+        if (!hideSeen(g)) return false;
         if (detectDownUpState(g.sample) !== 'down') return false;
         const id = extractDownUpIdentifier(g.sample);
         return id && open.has(g.hostname + '|' + id);
@@ -846,8 +932,14 @@ class Component extends DCLogic {
       xlCell('String', g.hostname), xlCell('String', g.severityName), xlCell('String', g.module), xlCell('String', g.eventType),
       xlCell('String', g.tag || '-'), xlCell('Number', g.count), xlCell('String', fmtDT(g.first)), xlCell('String', fmtDT(g.last)),
       xlCell('String', g.iface || '-'), xlCell('String', g.ip || '-'), xlCell('String', g.sample),
+      xlCell('String', isSeenGroup(g, this.state.seen || {}) ? '是' : '否'),
     ]);
-    const errSheet = xlSheet('Error Log', ['Hostname','Severity','Module','EventType','Tag','Count','First','Last','Interface','IP','Message'], errRows);
+    const errSheet = xlSheet('Error Log', ['Hostname','Severity','Module','EventType','Tag','Count','First','Last','Interface','IP','Message','已看過'], errRows);
+    const seenRows = Object.values(this.state.seen || {}).sort((a, b) => (b.seenAt || 0) - (a.seenAt || 0)).map(s => [
+      xlCell('String', fmtFull(s.seenAt)), xlCell('String', s.hostname || '-'), xlCell('String', s.severityName || '-'), xlCell('String', s.eventType || '-'),
+      xlCell('Number', s.count || 0), xlCell('String', fmtFull(s.lastLog)), xlCell('String', s.sample || ''),
+    ]);
+    const seenSheet = xlSheet('已看紀錄', ['看過時間','Hostname','Severity','EventType','當時次數','當時最後發生','Message'], seenRows);
 
     const devices = Object.values(this.state.devices || {}).sort((a, b) => a.hostname.localeCompare(b.hostname));
     const devRows = devices.map(d => [
@@ -865,7 +957,7 @@ class Component extends DCLogic {
 
     const xml = '<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?>'
       + '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">'
-      + errSheet + devSheet + duSheet + '</Workbook>';
+      + errSheet + devSheet + duSheet + seenSheet + '</Workbook>';
     const blob = new Blob([xml], { type: 'application/vnd.ms-excel' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -886,11 +978,16 @@ class Component extends DCLogic {
     const isDashboard = view.kind === 'dashboard' && !isSearching;
     const isDevices = view.kind === 'devices' && !isSearching;
     const isCpuMem = view.kind === 'cpumem' && !isSearching;
-    const isListView = !isDashboard && !isDevices && !isCpuMem;
+    const isSeenView = view.kind === 'seen' && !isSearching;
+    const isListView = !isDashboard && !isDevices && !isCpuMem && !isSeenView;
+    const seen = st.seen || {};
+    const notSeen = (g) => g.key === st.selectedKey || !isSeenGroup(g, seen);
 
     const decorateGroup = (g) => ({
       urgentReason: urgentReason(g) || '',
       ...g,
+      isSeen: !!seen[g.key],
+      seenLabel: seen[g.key] ? ('✓ 已看過 ' + fmtFull(seen[g.key].seenAt)) : '',
       keywordList: [...g.keywords],
       sevColor: sevColor(g.severity),
       isStorm: g.count >= 5,
@@ -905,7 +1002,7 @@ class Component extends DCLogic {
       ...cliReference(g),
       ...bookReference(g),
       select: () => this.selectGroup(g.key),
-      rowStyle: 'display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-bottom:1px solid oklch(0.25 0.012 260);cursor:pointer;background:' + (st.selectedKey === g.key ? 'oklch(0.26 0.02 235)' : 'transparent') + ';',
+      rowStyle: 'display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-bottom:1px solid oklch(0.25 0.012 260);cursor:pointer;opacity:' + (seen[g.key] && st.selectedKey !== g.key ? '0.6' : '1') + ';background:' + (st.selectedKey === g.key ? 'oklch(0.26 0.02 235)' : 'transparent') + ';',
       raws: (() => {
         const ident = extractDownUpIdentifier(g.sample);
         if (!ident) return g.raws;
@@ -932,7 +1029,7 @@ class Component extends DCLogic {
     const maxModule = Math.max(1, ...Object.values(st.moduleCounts || {}).map(m => m.total));
     const dashboardModuleDist = Object.entries(st.moduleCounts || {}).sort((a, b) => b[1].total - a[1].total).map(([name, c]) => ({ name, count: c.total, pct: Math.round(c.total / maxModule * 100) + '%' }));
 
-    const topRecurring = Object.values(groupsObj).sort((a, b) => b.count - a.count).slice(0, 10).map(g => ({ ...g, select: () => this.selectGroup(g.key) }));
+    const topRecurring = Object.values(groupsObj).filter(notSeen).sort((a, b) => b.count - a.count).slice(0, 10).map(g => ({ ...g, select: () => this.selectGroup(g.key) }));
 
     const devicesArr = Object.values(devicesObj).sort((a, b) => a.hostname.localeCompare(b.hostname)).map(d => {
       const errCount = d.errorCount || 0;
@@ -1010,6 +1107,18 @@ class Component extends DCLogic {
       { label: 'link_down', select: () => this.setState({ searchQuery: '', view: { kind: 'linkdown' }, selectedKey: null }) },
     ];
 
+    const seenList = Object.entries(seen).sort((a, b) => (b[1].seenAt || 0) - (a[1].seenAt || 0)).map(([key, s]) => ({
+      key, hostname: s.hostname || '-', severityName: s.severityName || '-', eventType: s.eventType || '-', sample: s.sample || '',
+      count: s.count || 0, seenAtText: fmtFull(s.seenAt), lastLogText: fmtFull(s.lastLog),
+      viewCount: s.viewCount || 1,
+      inCurrent: !!groupsObj[key],
+      sevColor: sevColor(({ Emergency:0, Alert:1, Critical:2, Error:3, Warning:4 })[s.severityName] ?? 5),
+      open: () => { if (groupsObj[key]) this.setState({ selectedKey: key }); },
+      unmark: (e) => { if (e && e.stopPropagation) e.stopPropagation(); this.unmarkSeen(key); },
+      rowStyle: 'display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-bottom:1px solid oklch(0.25 0.012 260);cursor:' + (groupsObj[key] ? 'pointer' : 'default') + ';background:' + (st.selectedKey === key ? 'oklch(0.26 0.02 235)' : 'transparent') + ';',
+    }));
+    const seenHiddenCount = Object.values(groupsObj).filter(g => !isIgnored(g) && isSeenGroup(g, seen)).length;
+
     const selectedGroupRaw = st.selectedKey ? groupsObj[st.selectedKey] : null;
     const selectedGroup = selectedGroupRaw ? decorateGroup(selectedGroupRaw) : null;
 
@@ -1025,10 +1134,14 @@ class Component extends DCLogic {
       dashboardNavStyle: 'padding:9px 10px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;margin-bottom:4px;background:' + (isDashboard ? 'oklch(0.28 0.02 235)' : 'transparent') + ';',
       devicesNavStyle: 'padding:9px 10px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;margin-bottom:4px;background:' + (isDevices ? 'oklch(0.28 0.02 235)' : 'transparent') + ';',
       alertErrorNavStyle: 'padding:9px 10px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;margin-bottom:4px;color:oklch(0.75 0.18 25);background:' + (view.kind === 'severity' && !isSearching ? 'oklch(0.3 0.1 25)' : 'transparent') + ';',
-      alertErrorCount: Object.values(groupsObj).filter(g => g.severity === 1 || g.severity === 3).reduce((s, g) => s + g.count, 0),
+      alertErrorCount: Object.values(groupsObj).filter(g => (g.severity === 1 || g.severity === 3) && !isIgnored(g) && notSeen(g)).reduce((s, g) => s + g.count, 0),
+      isSeenView, seenList, seenTotal: seenList.length, hasSeen: seenList.length > 0, noSeen: seenList.length === 0,
+      seenHiddenCount, hasSeenHidden: seenHiddenCount > 0,
+      selectSeenHistory: this.selectSeenHistory, clearSeen: this.clearSeen,
+      seenNavStyle: 'padding:9px 10px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;margin-bottom:4px;background:' + (isSeenView ? 'oklch(0.28 0.02 235)' : 'transparent') + ';',
       deviceCount: Object.keys(devicesObj).length,
       selectUrgent: this.selectUrgent,
-      urgentCount: Object.values(groupsObj).filter(g => urgentReason(g)).length,
+      urgentCount: Object.values(groupsObj).filter(g => notSeen(g) && urgentReason(g)).length,
       urgentNavStyle: 'padding:9px 10px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:700;margin-bottom:4px;color:oklch(0.8 0.19 25);border:1px solid oklch(0.62 0.21 25 / 0.45);background:' + (view.kind === 'urgent' && !isSearching ? 'oklch(0.62 0.21 25 / 0.28)' : 'oklch(0.62 0.21 25 / 0.1)') + ';',
       modules, keywordChips,
       isDashboard, isDevices, isListView,
