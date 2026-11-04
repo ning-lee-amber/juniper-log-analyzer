@@ -1,0 +1,1055 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+
+<helmet>
+  <style>
+    body{margin:0;}
+    ::-webkit-scrollbar{width:9px;height:9px}
+    ::-webkit-scrollbar-thumb{background:oklch(0.36 0.01 260);border-radius:5px}
+    ::-webkit-scrollbar-track{background:transparent}
+    a{color:oklch(0.68 0.14 235)}
+    a:hover{color:oklch(0.76 0.14 235)}
+  </style>
+</helmet>
+
+<div style="height:100vh;display:flex;flex-direction:column;background:oklch(0.17 0.012 260);color:oklch(0.93 0.006 260);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;overflow:hidden;">
+
+  <div style="display:flex;align-items:center;gap:16px;padding:14px 22px;border-bottom:1px solid oklch(0.3 0.012 260);background:oklch(0.19 0.012 260);flex-shrink:0;">
+    <div style="font-size:17px;font-weight:700;letter-spacing:0.2px;white-space:nowrap;">Juniper 錯誤日誌分析工具</div>
+    <label style="display:flex;align-items:center;gap:8px;background:oklch(0.68 0.14 235);color:oklch(0.15 0.01 260);font-weight:600;font-size:13px;padding:8px 14px;border-radius:6px;cursor:pointer;white-space:nowrap;flex-shrink:0;">
+      + 上傳日誌檔案
+      <input type="file" multiple="{{true}}" accept=".log,.txt" onChange="{{handleFiles}}" style="display:none;" />
+    </label>
+    <input placeholder="搜尋 PID / Interface / IP / Error Code / 關鍵字…" value="{{searchQuery}}" onChange="{{onSearchChange}}" style="flex:1;max-width:420px;background:oklch(0.24 0.012 260);border:1px solid oklch(0.34 0.012 260);color:oklch(0.93 0.006 260);padding:9px 12px;border-radius:6px;font-size:13px;outline:none;" />
+    <sc-if value="{{hasData}}" hint-placeholder-val="{{false}}">
+      <div style="display:flex;gap:8px;flex-shrink:0;">
+        <sc-for list="{{statChips}}" as="chip" hint-placeholder-count="4">
+          <div style="display:flex;flex-direction:column;align-items:center;padding:5px 12px;background:oklch(0.24 0.012 260);border-radius:6px;border:1px solid oklch(0.3 0.012 260);min-width:56px;">
+            <div style="font-size:15px;font-weight:700;color:{{chip.color}};">{{chip.value}}</div>
+            <div style="font-size:10px;color:oklch(0.62 0.01 260);white-space:nowrap;">{{chip.label}}</div>
+          </div>
+        </sc-for>
+      </div>
+      <button onClick="{{exportExcel}}" style="background:oklch(0.24 0.012 260);border:1px solid oklch(0.34 0.012 260);color:oklch(0.9 0.006 260);padding:8px 12px;border-radius:6px;font-size:12px;cursor:pointer;white-space:nowrap;flex-shrink:0;">匯出 Excel</button>
+      <button onClick="{{resetAll}}" style="background:transparent;border:1px solid oklch(0.34 0.012 260);color:oklch(0.65 0.01 260);padding:8px 12px;border-radius:6px;font-size:12px;cursor:pointer;white-space:nowrap;flex-shrink:0;">清除</button>
+    </sc-if>
+  </div>
+
+  <sc-if value="{{hasData}}" hint-placeholder-val="{{false}}">
+    <div style="flex:1;display:flex;min-height:0;">
+
+      <div style="{{leftPanelStyle}}">
+        <div onClick="{{selectUrgent}}" style="{{urgentNavStyle}}">⚠ 緊急處理 ({{urgentCount}})</div>
+        <div onClick="{{selectDashboard}}" style="{{dashboardNavStyle}}">📊 總覽 Dashboard</div>
+        <div onClick="{{selectAlertError}}" style="{{alertErrorNavStyle}}">🚨 Alert/Error ({{alertErrorCount}})</div>
+        <div onClick="{{selectDevices}}" style="{{devicesNavStyle}}">🖧 設備清單 ({{deviceCount}})</div>
+        <div onClick="{{selectCpuMem}}" style="{{cpuMemNavStyle}}"><span>📈 CPU / Memory</span><sc-if value="{{hasCpuMemOver}}" hint-placeholder-val="{{false}}"><span style="font-size:11px;color:oklch(0.8 0.17 25);background:oklch(0.62 0.21 25 / 0.2);border:1px solid oklch(0.62 0.21 25 / 0.45);padding:0 7px;border-radius:9px;">{{cpuMemNavBadge}}</span></sc-if></div>
+
+        <div style="font-size:11px;color:oklch(0.55 0.01 260);text-transform:uppercase;letter-spacing:0.5px;margin:16px 4px 6px;">關鍵字快篩</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;padding:0 4px;">
+          <sc-for list="{{keywordChips}}" as="kw" hint-placeholder-count="7">
+            <div onClick="{{kw.select}}" style="font-size:11px;padding:4px 9px;background:oklch(0.25 0.012 260);border:1px solid oklch(0.34 0.012 260);border-radius:12px;cursor:pointer;color:oklch(0.85 0.006 260);">{{kw.label}}</div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div onMouseDown="{{startDragLeft}}" style="width:6px;flex-shrink:0;cursor:col-resize;background:transparent;position:relative;"><div style="position:absolute;left:2px;top:0;bottom:0;width:1px;background:oklch(0.3 0.012 260);"></div></div>
+
+      <div style="flex:1;overflow-y:auto;padding:20px;min-width:260px;">
+
+        <sc-if value="{{isDashboard}}" hint-placeholder-val="{{false}}">
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:20px;margin-bottom:26px;">
+            <div style="min-width:0;">
+              <div style="font-size:14px;font-weight:700;margin:0 0 10px;">CPU Usage Top（門檻 80%）</div>
+              <div style="background:oklch(0.21 0.012 260);border:1px solid oklch(0.3 0.012 260);border-radius:8px;padding:14px 16px;">
+                <sc-for list="{{cpuTop}}" as="cd" hint-placeholder-count="5">
+                  <div style="margin-bottom:10px;min-width:0;">
+                    <div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;margin-bottom:4px;min-width:0;"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;">{{cd.hostname}}</span><span style="color:{{cd.cpuColor}};font-weight:700;flex-shrink:0;">{{cd.cpuUsage}}</span></div>
+                    <div style="height:7px;background:oklch(0.27 0.012 260);border-radius:4px;overflow:hidden;"><div style="height:100%;width:{{cd.cpuUsage}};background:{{cd.cpuColor}};"></div></div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="min-width:0;">
+              <div style="font-size:14px;font-weight:700;margin:0 0 10px;">Memory Usage Top（門檻 80%）</div>
+              <div style="background:oklch(0.21 0.012 260);border:1px solid oklch(0.3 0.012 260);border-radius:8px;padding:14px 16px;">
+                <sc-for list="{{memTop}}" as="md2" hint-placeholder-count="5">
+                  <div style="margin-bottom:10px;min-width:0;">
+                    <div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;margin-bottom:4px;min-width:0;"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;">{{md2.hostname}}</span><span style="color:{{md2.memColor}};font-weight:700;flex-shrink:0;">{{md2.memUsage}}</span></div>
+                    <div style="height:7px;background:oklch(0.27 0.012 260);border-radius:4px;overflow:hidden;"><div style="height:100%;width:{{md2.memUsage}};background:{{md2.memColor}};"></div></div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-bottom:26px;">
+            <div style="display:flex;align-items:center;gap:10px;margin:0 0 10px;">
+              <div style="font-size:14px;font-weight:700;">Down / Up 事件追蹤</div>
+              <sc-if value="{{unresolvedDownCount}}" hint-placeholder-val="{{0}}">
+                <span style="font-size:11px;background:oklch(0.62 0.21 25 / 0.2);color:oklch(0.75 0.18 25);border:1px solid oklch(0.62 0.21 25 / 0.4);padding:2px 9px;border-radius:10px;">{{unresolvedDownCount}} 筆尚未恢復</span>
+              </sc-if>
+            </div>
+            <div style="background:oklch(0.21 0.012 260);border:1px solid oklch(0.3 0.012 260);border-radius:8px;overflow:hidden;">
+              <sc-if value="{{hasDownUpEvents}}" hint-placeholder-val="{{false}}">
+                <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                  <thead>
+                    <tr style="text-align:left;color:oklch(0.6 0.01 260);border-bottom:1px solid oklch(0.3 0.012 260);">
+                      <th style="padding:8px 10px;">Hostname</th><th style="padding:8px 10px;">識別（介面/Session/Slot/IP）</th><th style="padding:8px 10px;">Down 首次</th><th style="padding:8px 10px;">Down 最後</th><th style="padding:8px 10px;">次數</th><th style="padding:8px 10px;">是否恢復 Up</th><th style="padding:8px 10px;">Up 時間</th><th style="padding:8px 10px;">建議</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <sc-for list="{{downUpList}}" as="du" hint-placeholder-count="4">
+                      <tr style="border-bottom:1px solid oklch(0.25 0.012 260);">
+                        <td style="padding:8px 10px;white-space:nowrap;">{{du.hostname}}</td>
+                        <td style="padding:8px 10px;color:oklch(0.68 0.01 260);">{{du.identifier}}</td>
+                        <td style="padding:8px 10px;white-space:nowrap;">{{du.downFirst}}</td>
+                        <td style="padding:8px 10px;white-space:nowrap;">{{du.downLast}}</td>
+                        <td style="padding:8px 10px;">{{du.downCount}}</td>
+                        <td style="padding:8px 10px;color:{{du.statusColor}};font-weight:700;white-space:nowrap;">{{du.upStatus}}</td>
+                        <td style="padding:8px 10px;white-space:nowrap;">{{du.upAt}}</td>
+                        <td style="padding:8px 10px;color:oklch(0.75 0.15 55);">{{du.suggestion}}</td>
+                      </tr>
+                    </sc-for>
+                  </tbody>
+                </table>
+              </sc-if>
+              <sc-if value="{{!hasDownUpEvents}}" hint-placeholder-val="{{true}}">
+                <div style="padding:16px;font-size:12.5px;color:oklch(0.55 0.01 260);">未偵測到可辨識的 Down/Up 狀態事件。</div>
+              </sc-if>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px;">
+            <div style="min-width:0;">
+              <div style="font-size:14px;font-weight:700;margin:0 0 10px;">各模組錯誤分佈</div>
+              <div style="background:oklch(0.21 0.012 260);border:1px solid oklch(0.3 0.012 260);border-radius:8px;padding:14px 16px;">
+                <sc-for list="{{dashboardModuleDist}}" as="md" hint-placeholder-count="6">
+                  <div style="margin-bottom:10px;">
+                    <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;"><span>{{md.name}}</span><span style="color:oklch(0.65 0.01 260);">{{md.count}}</span></div>
+                    <div style="height:7px;background:oklch(0.27 0.012 260);border-radius:4px;overflow:hidden;"><div style="height:100%;width:{{md.pct}};background:oklch(0.68 0.14 235);"></div></div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="min-width:0;">
+              <div style="font-size:14px;font-weight:700;margin:0 0 10px;">高頻重複告警 Top 10（狂跳訊息）</div>
+              <div style="background:oklch(0.21 0.012 260);border:1px solid oklch(0.3 0.012 260);border-radius:8px;overflow:hidden;">
+                <sc-for list="{{topRecurring}}" as="g" hint-placeholder-count="6">
+                  <div onClick="{{g.select}}" style="padding:9px 14px;border-bottom:1px solid oklch(0.27 0.012 260);cursor:pointer;display:flex;justify-content:space-between;gap:10px;align-items:center;">
+                    <div style="min-width:0;">
+                      <div style="font-size:12px;font-weight:600;color:oklch(0.9 0.006 260);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{g.hostname}}</div>
+                      <div style="font-size:11px;color:oklch(0.6 0.01 260);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:280px;">{{g.sample}}</div>
+                    </div>
+                    <div style="font-size:12px;font-weight:700;color:oklch(0.78 0.15 95);flex-shrink:0;">×{{g.count}}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{isCpuMem}}" hint-placeholder-val="{{false}}">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px;">
+            <div style="font-size:14px;font-weight:700;">CPU / Memory 使用率（門檻 80%）</div>
+            <sc-if value="{{hasCpuMemOver}}" hint-placeholder-val="{{false}}">
+              <span style="font-size:11px;background:oklch(0.62 0.21 25 / 0.2);color:oklch(0.8 0.17 25);border:1px solid oklch(0.62 0.21 25 / 0.4);padding:2px 9px;border-radius:10px;">{{cpuMemOverCount}} 個元件 ≥ 80%</span>
+            </sc-if>
+            <div onClick="{{toggleCmOnlyOver}}" style="{{cmOnlyOverStyle}}">{{cmOnlyOverLabel}}</div>
+          </div>
+          <div style="font-size:11.5px;color:oklch(0.58 0.01 260);margin:0 0 10px;">RE:CPU = 100 − Idle(5 sec / 1 / 5 / 15 min),Memory = Memory utilization。FPC:CPU = Total,Memory = Heap,另列 Buffer。來源 show chassis routing-engine / show chassis fpc。</div>
+          <sc-if value="{{hasCpuMemRows}}" hint-placeholder-val="{{false}}">
+            <div style="overflow-x:auto;">
+              <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+                <thead>
+                  <tr style="text-align:left;color:oklch(0.6 0.01 260);">
+                    <th style="padding:8px 10px;">Hostname</th><th style="padding:8px 10px;">元件</th><th style="padding:8px 10px;">狀態</th>
+                    <th style="padding:8px 10px;text-align:right;">CPU</th><th style="padding:8px 10px;text-align:right;">1 min</th><th style="padding:8px 10px;text-align:right;">5 min</th><th style="padding:8px 10px;text-align:right;">15 min</th>
+                    <th style="padding:8px 10px;text-align:right;">Memory / Heap</th><th style="padding:8px 10px;text-align:right;">Buffer</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <sc-for list="{{cpuMemRows}}" as="cm" hint-placeholder-count="8">
+                    <tr style="border-top:{{cm.borderTop}};background:{{cm.rowBg}};">
+                      <td style="padding:7px 10px;font-weight:600;white-space:nowrap;">{{cm.hostShow}}</td>
+                      <td style="padding:7px 10px;white-space:nowrap;">{{cm.comp}}</td>
+                      <td style="padding:7px 10px;color:oklch(0.65 0.01 260);">{{cm.state}}</td>
+                      <sc-for list="{{cm.cells}}" as="c" hint-placeholder-count="6">
+                        <td style="padding:7px 10px;text-align:right;font-variant-numeric:tabular-nums;color:{{c.color}};font-weight:{{c.weight}};background:{{c.bg}};">{{c.text}}</td>
+                      </sc-for>
+                    </tr>
+                  </sc-for>
+                </tbody>
+              </table>
+            </div>
+          </sc-if>
+          <sc-if value="{{noCpuMemRows}}" hint-placeholder-val="{{false}}">
+            <div style="padding:16px;font-size:12.5px;color:oklch(0.55 0.01 260);">沒有可顯示的資料(未找到 show chassis routing-engine / show chassis fpc 輸出,或目前無超標項目)。</div>
+          </sc-if>
+        </sc-if>
+
+        <sc-if value="{{isDevices}}" hint-placeholder-val="{{false}}">
+          <div style="font-size:14px;font-weight:700;margin:0 0 12px;">設備巡檢摘要</div>
+          <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+            <thead>
+              <tr style="text-align:left;color:oklch(0.6 0.01 260);border-bottom:1px solid oklch(0.3 0.012 260);">
+                <th style="padding:8px 10px;">Hostname</th><th style="padding:8px 10px;">Version</th><th style="padding:8px 10px;">Model</th>
+                <th style="padding:8px 10px;">CPU</th><th style="padding:8px 10px;">Memory</th><th style="padding:8px 10px;">RE 狀態</th><th style="padding:8px 10px;">Hardware / FPC</th><th style="padding:8px 10px;">Alarms</th><th style="padding:8px 10px;">Log Analysis</th>
+              </tr>
+            </thead>
+            <tbody>
+              <sc-for list="{{devicesArr}}" as="dv" hint-placeholder-count="8">
+                <tr style="border-bottom:1px solid oklch(0.25 0.012 260);">
+                  <td style="padding:8px 10px;font-weight:600;">{{dv.hostname}}</td>
+                  <td style="padding:8px 10px;color:oklch(0.68 0.01 260);">{{dv.version}}</td>
+                  <td style="padding:8px 10px;color:oklch(0.68 0.01 260);">{{dv.model}}</td>
+                  <td style="padding:8px 10px;color:{{dv.cpuColor}};font-weight:600;">{{dv.cpuUsage}}</td>
+                  <td style="padding:8px 10px;color:{{dv.memColor}};font-weight:600;">{{dv.memUsage}}</td>
+                  <td style="padding:8px 10px;color:{{dv.reColor}};font-weight:600;white-space:nowrap;">{{dv.reText}}</td>
+                  <td style="padding:8px 10px;color:{{dv.hwColor}};font-weight:600;">{{dv.hwText}}</td>
+                  <td style="padding:8px 10px;">{{dv.alarmCount}}</td>
+                  <td style="padding:8px 10px;color:{{dv.statusColor}};font-weight:600;">{{dv.logStatus}}</td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </sc-if>
+
+        <sc-if value="{{isListView}}" hint-placeholder-val="{{false}}">
+          <div style="font-size:14px;font-weight:700;margin:0 0 12px;">{{listTitle}}（{{visibleGroups.length}} 筆彙整）</div>
+          <sc-for list="{{visibleGroups}}" as="g" hint-placeholder-count="8">
+            <div onClick="{{g.select}}" style="{{g.rowStyle}}">
+              <div style="width:4px;align-self:stretch;border-radius:2px;background:{{g.sevColor}};flex-shrink:0;"></div>
+              <div style="flex:1;min-width:0;">
+                <div style="display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center;margin-bottom:3px;min-width:0;">
+                  <span style="font-size:12.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;max-width:100%;">{{g.hostname}}</span>
+                  <span style="font-size:10.5px;padding:1px 7px;border-radius:10px;background:{{g.sevColor}};color:oklch(0.15 0.01 260);font-weight:700;white-space:nowrap;flex-shrink:0;">{{g.severityName}}</span>
+                  <span style="font-size:10.5px;color:oklch(0.6 0.01 260);white-space:nowrap;">{{g.eventType}}</span>
+                  <sc-if value="{{g.urgentReason}}" hint-placeholder-val="{{false}}">
+                    <span style="font-size:10.5px;padding:1px 7px;border-radius:10px;background:oklch(0.62 0.21 25 / 0.22);color:oklch(0.8 0.17 25);border:1px solid oklch(0.62 0.21 25 / 0.45);white-space:nowrap;flex-shrink:0;">⚠ {{g.urgentReason}}</span>
+                  </sc-if>
+                  <sc-if value="{{g.isStorm}}" hint-placeholder-val="{{false}}">
+                    <span style="font-size:10.5px;padding:1px 7px;border-radius:10px;background:oklch(0.3 0.012 260);color:oklch(0.78 0.15 95);white-space:nowrap;flex-shrink:0;">🔁 狂跳</span>
+                  </sc-if>
+                </div>
+                <div style="font-size:12px;color:oklch(0.8 0.006 260);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{g.sample}}</div>
+                <div style="font-size:11px;color:oklch(0.55 0.01 260);margin-top:2px;">{{g.timeRange}}</div>
+              </div>
+              <div style="font-size:15px;font-weight:700;color:oklch(0.7 0.01 260);flex-shrink:0;">×{{g.count}}</div>
+            </div>
+          </sc-for>
+        </sc-if>
+
+      </div>
+
+      <div onMouseDown="{{startDragRight}}" style="width:6px;flex-shrink:0;cursor:col-resize;background:transparent;position:relative;"><div style="position:absolute;left:2px;top:0;bottom:0;width:1px;background:oklch(0.3 0.012 260);"></div></div>
+
+      <div style="{{rightPanelStyle}}">
+        <sc-if value="{{selectedGroup}}" hint-placeholder-val="{{false}}">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+            <span style="font-size:11px;padding:2px 9px;border-radius:10px;background:{{selectedGroup.sevColor}};color:oklch(0.15 0.01 260);font-weight:700;">{{selectedGroup.severityName}}</span>
+            <span style="font-size:13px;font-weight:700;">{{selectedGroup.hostname}}</span>
+          </div>
+          <div style="font-size:13px;line-height:1.6;color:oklch(0.88 0.006 260);margin-bottom:14px;padding:10px 12px;background:oklch(0.24 0.012 260);border-radius:6px;">{{selectedGroup.sample}}</div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;margin-bottom:16px;">
+            <div><div style="color:oklch(0.55 0.01 260);">模組</div><div>{{selectedGroup.module}}</div></div>
+            <div><div style="color:oklch(0.55 0.01 260);">事件類型</div><div>{{selectedGroup.eventType}}</div></div>
+            <div><div style="color:oklch(0.55 0.01 260);">Facility/Tag</div><div>{{selectedGroup.tagDisplay}}</div></div>
+            <div><div style="color:oklch(0.55 0.01 260);">PID</div><div>{{selectedGroup.pidDisplay}}</div></div>
+            <div><div style="color:oklch(0.55 0.01 260);">Interface</div><div>{{selectedGroup.ifDisplay}}</div></div>
+            <div><div style="color:oklch(0.55 0.01 260);">IP</div><div>{{selectedGroup.ipDisplay}}</div></div>
+            <div><div style="color:oklch(0.55 0.01 260);">發生次數</div><div>{{selectedGroup.count}}</div></div>
+            <div><div style="color:oklch(0.55 0.01 260);">時間範圍</div><div>{{selectedGroup.timeRange}}</div></div>
+          </div>
+
+          <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:16px;">
+            <sc-for list="{{selectedGroup.keywordList}}" as="kwd" hint-placeholder-count="2">
+              <span style="font-size:10.5px;padding:2px 8px;border-radius:10px;background:oklch(0.3 0.012 260);color:oklch(0.75 0.14 55);">{{kwd}}</span>
+            </sc-for>
+          </div>
+
+          <div style="font-size:12px;font-weight:700;margin-bottom:6px;color:oklch(0.75 0.01 260);">原始日誌（最多顯示 50 筆）</div>
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            <sc-for list="{{selectedGroup.raws}}" as="raw" hint-placeholder-count="3">
+              <pre style="margin:0;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10.5px;line-height:1.5;color:oklch(0.72 0.01 260);background:oklch(0.14 0.01 260);border:1px solid oklch(0.27 0.012 260);border-radius:5px;padding:7px 9px;white-space:pre-wrap;word-break:break-all;">{{raw}}</pre>
+            </sc-for>
+          </div>
+        </sc-if>
+        <sc-if value="{{!selectedGroup}}" hint-placeholder-val="{{true}}">
+          <div style="height:100%;display:flex;align-items:center;justify-content:center;text-align:center;color:oklch(0.5 0.01 260);font-size:12.5px;padding:20px;">點選左側清單中的項目以查看詳情</div>
+        </sc-if>
+      </div>
+
+    </div>
+  </sc-if>
+
+  <sc-if value="{{!hasData}}" hint-placeholder-val="{{true}}">
+    <div style="flex:1;display:flex;align-items:center;justify-content:center;">
+      <div style="text-align:center;max-width:520px;">
+        <sc-if value="{{loading}}" hint-placeholder-val="{{false}}">
+          <div style="font-size:15px;color:oklch(0.7 0.01 260);">解析日誌中…</div>
+        </sc-if>
+        <sc-if value="{{!loading}}" hint-placeholder-val="{{true}}">
+          <div style="font-size:18px;font-weight:700;margin-bottom:10px;">上傳 Juniper 設備日誌開始分析</div>
+          <div style="font-size:13px;color:oklch(0.62 0.01 260);line-height:1.7;margin-bottom:22px;">
+            支援 SRX / MX / EX / QFX 之 syslog 輸出（含 SSH session 擷取檔）。<br/>
+            自動依優先級（Critical/Error/Warning/Notice）與模組分類，<br/>
+            並搜尋 chip、error、alarm、fail、warning、mqss、link_down 等關鍵字與重複狂跳訊息。
+          </div>
+          <label style="display:inline-flex;align-items:center;gap:8px;background:oklch(0.68 0.14 235);color:oklch(0.15 0.01 260);font-weight:600;font-size:13px;padding:10px 18px;border-radius:6px;cursor:pointer;">
+            + 選擇檔案（可多選 .log / .txt）
+            <input type="file" multiple="{{true}}" accept=".log,.txt" onChange="{{handleFiles}}" style="display:none;" />
+          </label>
+        </sc-if>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+
+const YEAR = 2026;
+const MONTHS = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+const SEV_NAME = {0:'Emergency',1:'Alert',2:'Critical',3:'Error',4:'Warning',5:'Notice',6:'Info',7:'Debug'};
+const IGNORE_RE = /\bauth|login|\blsp\b|kernel|%kern|lacp|\bbgp|alarm clear|host[ _-]?bound|\bfib\b|\brib\b|new time|rsvp|notification|disconnect|sshd/i;
+const URGENT_RULES = [
+  { re: /fpc.*(offline|restart|reboot|crash|panic)|vmcore|core[- ]?dump|kernel panic/i, not: /by cli command|is_resync_ready/i, reason: 'FPC/程序異常重啟' },
+  { re: /laser bias current low|(tx|rx) power (low|high).*alarm set/i, reason: '光模組劣化' },
+  { re: /Up -> Down|state:?\s*Down|went down|link ?down/i, not: /alarm clear/i, reason: '鏈路/Session 中斷' },
+  { re: /alarm set.*(color=RED|major)/i, reason: 'Major 告警未解除' },
+  { re: /fabric|train rx failed|parity|ecc|uncorrectable|fatal/i, reason: '交換結構/晶片錯誤' },
+  { re: /(pem|power supply|fan).*(fail|absent)|temperature.*(high|hot|exceed)|overheat/i, reason: '電源/風扇/溫度' },
+];
+function urgentReason(g){
+  if (isIgnored(g)) return null;
+  const text = [g.sample, g.tag, g.eventType].filter(Boolean).join(' ');
+  for (const r of URGENT_RULES) if (r.re.test(text) && !(r.not && r.not.test(text))) return r.reason;
+  if (g.severity <= 2) return SEV_NAME[g.severity] + ' 等級';
+  return null;
+}
+const KEEP_RE = /i2c|pcf/i;
+function isIgnored(g){
+  const text = [g.sample, g.tag, g.process, g.module, g.eventType].filter(Boolean).join(' ');
+  if (/kernel|%kern/i.test(text) && KEEP_RE.test(text)) return false;
+  return IGNORE_RE.test(text);
+}
+const KEYWORDS = ['chip','error','alarm','fail','warning','mqss','fpc'];
+const RED = 'oklch(0.62 0.21 25)';
+const ORANGE = 'oklch(0.68 0.18 55)';
+const YELLOW = 'oklch(0.78 0.15 95)';
+const GREEN = 'oklch(0.72 0.15 150)';
+const BLUE = 'oklch(0.68 0.14 235)';
+
+const reDaemon = /^([A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})\s+([\w.\-]+)\s+([\w\-]+)\[(\d+)\]:\s*%([A-Z0-9]+)-(\d)(?:-([A-Z0-9_]+))?:\s*(.*)$/;
+const rePfe = /^([A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})\s+([\w.\-]+)\s*:\s*%([A-Z0-9]+)-(\d):\s*(.*)$/;
+const reOld = /^([A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})\s+([\w.\-]+)\s+(.*)$/;
+const reDatePrefix = /^[A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\s+[\w.\-]+\s+\S/;
+const rePrompt = /[\w.\-]+@([A-Za-z0-9][\w.\-]*?)>/;
+const reIface = /\b((?:xe|ge|et|ae|so|fxp|em|lo|irb|ps|st)-?[\d\/:.]+)\b/i;
+const reIp = /\b\d{1,3}(?:\.\d{1,3}){3}\b/;
+
+function sevColor(sev){ return sev<=2?RED : sev===3?ORANGE : sev===4?YELLOW : GREEN; }
+function bucketOf(sev){ return sev<=2?'critical' : sev===3?'error' : sev===4?'warning' : 'notice'; }
+function classifyModule(e){
+  const p=(e.process||'').toLowerCase(); const t=(e.tag||'').toUpperCase(); const msg=e.message.toLowerCase();
+  if (p==='rpd' || t.includes('OSPF') || t.includes('BGP') || t.includes('MPLS') || t.includes('RSVP') || t.includes('LDP') || t.includes('ISIS')) return 'Routing (RPD)';
+  if (p==='lacpd' || t.includes('LACP')) return 'LACP';
+  if (p==='chassisd' || msg.includes('luchip') || msg.includes('idmem') || msg.includes('pio_') || msg.includes('i2c') || p.startsWith('fpc') || e.facility==='PFE') return 'Chassis/FPC';
+  if (p==='mib2d' || t.includes('LINK_') || msg.includes('rx power') || msg.includes('sfp') || msg.includes('qsfp')) return 'Interface';
+  if (p==='sshd' || p==='inetd' || e.facility==='AUTH') return 'Auth/Access';
+  if (p==='snmpd' || t.includes('SNMP')) return 'SNMP';
+  if (p==='kernel' || e.facility==='KERN') return 'Kernel';
+  if (msg.includes('ddos')) return 'DDoS Protection';
+  if (p==='bfdd' || t.includes('BFD')) return 'BFD';
+  if (p==='dot1xd') return 'Dot1x';
+  if (msg.includes('mspmand') || msg.includes('cpu zone change')) return 'Services PIC (MS-MPC)';
+  return 'Other';
+}
+function classifyEvent(e){
+  const t=(e.tag||'').toUpperCase(); const msg=e.message.toLowerCase();
+  if (t.includes('LINK_DOWN') || msg.includes('operstatus down(2)')) return 'Interface Down';
+  if (t.includes('LINK_UP') || msg.includes('operstatus up(1)')) return 'Interface Up';
+  if (t.includes('LACP')) return 'LACP State Change';
+  if (t.includes('BFD')) return 'BFD State Change';
+  if (t.includes('OSPF')) return 'OSPF';
+  if (t.includes('BGP')) return 'BGP';
+  if (t.includes('MPLS') || t.includes('RSVP') || t.includes('LDP')) return 'LSP/MPLS';
+  if (msg.includes('ran for') && msg.includes('without yielding')) return 'Scheduler Stall';
+  if (msg.includes('lmem errors require') || (msg.includes('zone') && msg.includes('disable'))) return 'Chip/Memory Error (Zone Disable)';
+  if (msg.includes('detected error nexthop') || msg.includes('pfe: notif') || msg.includes('auto jsim')) return 'PFE Hardware Error';
+  if (msg.includes('cpu zone change') || msg.includes('green=>red') || msg.includes('mspmand')) return 'CPU Resource Alarm';
+  if (msg.includes('luchip') || msg.includes('idmem') || msg.includes('pio_')) return 'Chip/Memory Error';
+  if (msg.includes('i2c')) return 'Hardware I2C Error';
+  if (msg.includes('rx power') || msg.includes('sfp') || msg.includes('qsfp')) return 'Optical Alarm';
+  if (msg.includes('watermark')) return 'Resource Watermark';
+  if (msg.includes('ddos')) return 'DDoS Event';
+  if (msg.includes('policy')) return 'Policy';
+  if (e.facility==='AUTH') return 'Authentication';
+  if (t.includes('SNMP') || msg.includes('snmp')) return 'SNMP Trap/Event';
+  return 'General';
+}
+function normalizeMsg(msg){ return msg.replace(/0x[0-9a-fA-F]+/g,'0xHEX').replace(reIp,'IP').replace(/\d+/g,'#'); }
+function detectDownUpState(msg){
+  const arrow = msg.match(/\b(Up|Down)\b\s*->\s*\b(Up|Down)\b/i);
+  if (arrow) return arrow[2].toLowerCase();
+  if (/\bdown\b/i.test(msg)) return 'down';
+  if (/\bup\b/i.test(msg)) return 'up';
+  return null;
+}
+function extractDownUpIdentifier(msg){
+  let m;
+  if ((m = msg.match(/session id\s*(\d+)/i))) return 'session:' + m[1];
+  if ((m = msg.match(reIface))) return 'if:' + m[1].toLowerCase();
+  if ((m = msg.match(/\(FPC Slot\s*(\d+)(?:,\s*PIC Slot\s*(\d+))?\)/i))) return 'slot:' + m[1] + (m[2] ? ('-' + m[2]) : '');
+  if ((m = msg.match(/\bfpc\s*(\d+)\b/i))) return 'fpc:' + m[1];
+  if ((m = msg.match(reIp))) return 'ip:' + m[0];
+  return null;
+}
+function escXml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function xlCell(type, value){ return '<Cell><Data ss:Type="' + type + '">' + escXml(value) + '</Data></Cell>'; }
+function xlRow(cells){ return '<Row>' + cells.join('') + '</Row>'; }
+function xlSheet(name, headerRow, rows){
+  return '<Worksheet ss:Name="' + escXml(name) + '"><Table>' + xlRow(headerRow.map(h => xlCell('String', h))) + rows.map(r => xlRow(r)).join('') + '</Table></Worksheet>';
+}
+function parseTs(ts){
+  const m = ts.match(/^([A-Z][a-z]{2})\s+(\d{1,2})\s+(\d{2}):(\d{2}):(\d{2})/);
+  if (!m || MONTHS[m[1]]===undefined) return null;
+  return new Date(YEAR, MONTHS[m[1]], Number(m[2]), Number(m[3]), Number(m[4]), Number(m[5]));
+}
+function fmtDT(d){ if(!d) return '-'; const p=n=>String(n).padStart(2,'0'); return `${p(d.getMonth()+1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; }
+function suggestNote(g){
+  switch(g.eventType){
+    case 'Chip/Memory Error': return '此類 LUCHIP/IDMEM 讀取錯誤通常為記憶體完整性自我檢查所觸發；若後續無持續增加，可列為觀察項目，非必然需更換硬體，建議持續追蹤。';
+    case 'Chip/Memory Error (Zone Disable)': return 'LMEM 錯誤已導致 PPE Zone 被停用，嚴重度較高；若 error 已修復後續檢查應會通過並停止，若持續增加，JTAC 建議重啟卡板（FPC）。';
+    case 'PFE Hardware Error': return 'PFE 偵測到資料平面錯誤（nexthop/notif dump），多屬板卡偵測錯誤後自行修復的訊息；建議確認是否伴隨封包遺失或轉發異常，若僅單次發生可視為自我修復。';
+    case 'CPU Resource Alarm': return '服務 PIC（MS-MPC）CPU 使用率進入 RED 區間，可能為異常流量或攻擊導致 CPU 衝高，建議保持觀察並確認是否有對應的流量異常或攻擊特徵。';
+    case 'Scheduler Stall': return 'PFE 排程執行緒長時間未讓出（通常為 Idle 執行緒），多為量測異常值，一般無需處理，可留意是否影響封包轉發效能。';
+    case 'Optical Alarm': return '光模組 Rx 功率過低告警，若伴隨 set/cleared 快速交替（狂跳），建議檢查光纖端面清潔度、對接光模組與收發器狀態。';
+    case 'LACP State Change': return 'LACP 狀態頻繁切換（flapping），建議確認對接埠韌體版本與線路品質，避免影響匯聚頻寬與轉發穩定性。';
+    case 'Interface Down': return '介面狀態變化，請確認是否為計畫性維護，並檢查對端裝置與線路狀態。';
+    case 'Interface Up': return '介面恢復上線，建議對照前後日誌確認是否伴隨多次抖動。';
+    case 'Hardware I2C Error': return 'I2C 匯流排讀取錯誤，可能與 FPC 硬體或背板連接有關，建議持續觀察是否重複發生，必要時安排硬體檢測。';
+    case 'DDoS Event': return 'DDoS 保護機制觸發 socket 重連，通常為短暫控制平面連線中斷，建議留意是否影響管理存取。';
+    case 'Resource Watermark': return '系統資源水位標記更新，屬正常統計記錄，非異常事件。';
+    case 'BFD State Change': return 'BFD 狀態變化可能導致路由重收斂，建議確認是否伴隨介面或鄰居異常同時發生。';
+    default: return '請依據嚴重等級（' + g.severityName + '）與發生頻率（×' + g.count + '）評估是否需進一步排查。';
+  }
+}
+
+const HIST_REF = [
+  { keywords: ['luchip','idmem','gumem','lmem'],
+    note: 'LUCHIP/IDMEM/GUMEM 記憶體讀取錯誤，屬記憶體完整性自我檢查機制；歷史上多次發生後未再增加、無需更換硬體。',
+    cases: [
+      { date: '2019-10-21', hostname: 'FPCPE.SRT002' },
+      { date: '2019-11-11', hostname: 'NH468-PE-MX2020-002' },
+      { date: '2019-12-11', hostname: 'NH468-PE-MX2020-002' },
+      { date: '2019-12-25', hostname: 'PC334-Cache-MX960-002' },
+      { date: '2019-12-25', hostname: 'NH468-PE-MX960-004.RE0' },
+    ] },
+  { keywords: ['detected error nexthop','trinity_pio','pfe'],
+    note: 'PFE data-error nexthop / trinity_pio 錯誤，歷史紀錄顯示屬板卡偵測錯誤自行修復的訊息。',
+    cases: [ { date: '2019-11-27', hostname: 'FPCBR.JRT001' }, { date: '2019-12-09', hostname: 'FPCBR.JRT002' } ] },
+  { keywords: ['mspmand','cpu zone change','cpu utilization'],
+    note: 'mspmand CPU zone 衝高（GREEN=>RED），歷史上曾研判為攻擊流量造成 CPU 使用率飆升，建議保持觀察。',
+    cases: [ { date: '2019-12-09', hostname: 'SPC1' } ] },
+];
+function matchHistory(g){
+  const raws = (g.raws || [g.sample]).join(' ').toLowerCase();
+  const hits = HIST_REF.map(h => ({ h, matched: h.keywords.filter(k => raws.includes(k)) })).filter(x => x.matched.length);
+  if (!hits.length) return { histFound: false, histNote: '查無相符歷史紀錄（此為此份上傳日誌首次出現的事件型態）。', histCases: [], histBadgeLabel: '無先例', histBadgeBg: 'oklch(0.28 0.012 260)', histBadgeColor: 'oklch(0.6 0.01 260)' };
+  const matchedKeywords = [...new Set(hits.flatMap(x => x.matched))];
+  const note = hits.map(x => x.h.note).join(' ');
+  const cases = hits.flatMap(x => x.h.cases);
+  return { histFound: true, histNote: '匹配關鍵字：' + matchedKeywords.join('、') + '。' + note, histCases: cases, histBadgeLabel: '曾發生過（' + matchedKeywords.join('、') + '）', histBadgeBg: 'oklch(0.3 0.1 55 / 0.4)', histBadgeColor: 'oklch(0.75 0.15 55)' };
+}
+const CLI_REF_LINK = 'https://www.juniper.net/documentation/us/en/software/junos/topic-map/operational-commands.html';
+const CLI_CMDS = {
+  'Chip/Memory Error': ['show chassis fpc detail', 'show chassis fpc pic-status', 'show log messages | match LUCHIP'],
+  'Chip/Memory Error (Zone Disable)': ['show chassis fpc detail', 'request chassis fpc restart slot <slot>', 'show system core-dumps'],
+  'PFE Hardware Error': ['show chassis fpc detail', 'show pfe statistics traffic', 'show log messages | match PFE'],
+  'CPU Resource Alarm': ['show chassis fpc detail', 'show services service-sets cpu-usage', 'show system processes extensive'],
+  'Services PIC (MS-MPC)': ['show services service-sets summary', 'show chassis fpc detail', 'show log messages | match mspmand'],
+  'Scheduler Stall': ['show chassis fpc detail', 'show system processes extensive'],
+  'Optical Alarm': ['show interfaces diagnostics optics <interface>', 'show chassis alarms', 'show interfaces extensive <interface>'],
+  'LACP State Change': ['show lacp interfaces', 'show interfaces extensive <interface>'],
+  'Interface Down': ['show interfaces extensive <interface>', 'show interfaces diagnostics optics <interface>', 'show log messages | match <interface>'],
+  'Interface Up': ['show interfaces extensive <interface>', 'show interfaces terse'],
+  'Hardware I2C Error': ['show chassis hardware', 'show chassis alarms', 'show chassis environment'],
+  'DDoS Event': ['show ddos-protection protocols', 'show system connections'],
+  'Resource Watermark': ['show system buffers', 'show chassis fpc detail'],
+  'BFD State Change': ['show bfd session', 'show bfd session extensive', 'show log messages | match bfd'],
+  'Auth/Access': ['show log messages | match sshd', 'show system connections', 'show system users'],
+  'default': ['show log messages | match <keyword>', 'show chassis alarms', 'show system alarms'],
+};
+function cliReference(g){
+  const cmds = CLI_CMDS[g.eventType] || CLI_CMDS.default;
+  return { cliCmds: cmds.map(c => ({ text: c })), cliLink: CLI_REF_LINK };
+}
+const BOOK_REFS = {
+  'Chip/Memory Error': { chapter: 'Chapter 4－JUNOS Platforms Hardware Troubleshooting', section: 'Displaying PFE Errors', page: '4-32',
+    points: [
+      'show pfe statistics error 顯示 PFE 的 ASIC 或內部通訊路徑（internal communications paths）發生的錯誤計數。',
+      '判斷重點在於「慢性（chronic）錯誤」與「暫時性突發（transient burst）錯誤」的區別 —— 後者常見於不當移除/插入 FRU 時。',
+      '書中原文：PFE errors are primarily of concern when you observe the error counts to be incrementing when the system is in an otherwise stable state（系統穩定、沒有人在動 FRU 卻仍持續遞增，才是真正需要關注的狀況）。',
+      '可用 clear pfe statistics（隱藏指令）先歸零計數，再觀察一段時間是否重新累加，藉此區分是否為慢性問題。',
+    ] },
+  'Chip/Memory Error (Zone Disable)': { chapter: 'Chapter 4－JUNOS Platforms Hardware Troubleshooting', section: 'Restarting Hardware Components', page: '4-33~34',
+    points: [
+      '可用 request chassis fpc slot-number restart 重啟單一 FPC，或 request chassis pic fpc-slot slot-number pic-slot slot-number [online|offline] 單獨重啟 PIC。',
+      '書中強調：bouncing an FPC or a problematic PIC might alleviate the need for more drastic actions like a system reboot（先嘗試重啟卡板，往往可避免整機重開機）。',
+      '重啟後可用連續的 show chassis fpc 觀察狀態機從 offline → present → online 的進展，確認卡板正常復原。',
+    ] },
+  'PFE Hardware Error': { chapter: 'Chapter 4－JUNOS Platforms Hardware Troubleshooting', section: 'Displaying PFE Errors', page: '4-32',
+    points: [
+      '同樣對應 show pfe statistics error 章節：nexthop / notif 類型的資料平面錯誤，需比對錯誤計數是否隨時間持續遞增。',
+      '若僅在你進行 FRU 抽換、卡板重啟等操作前後短暫出現，書中視為操作造成的暫時性突發，非硬體故障徵兆。',
+      '長期監控建議：定期記錄 show pfe statistics error 的輸出並比較差異（delta），而非只看單次快照。',
+    ] },
+  'CPU Resource Alarm': { chapter: 'Chapter 4－JUNOS Platforms Hardware Troubleshooting', section: 'Displaying FPC Status', page: '4-24',
+    points: [
+      'show chassis fpc 提供 CPU Utilization (%) 與 Interrupt CPU Utilization (%) 兩個欄位，後者是前者當中「純中斷處理」所占比例。',
+      'Heap Utilization (%)：書中原文指出 If this number exceeds 80%, it might indicate a software problem (a memory leak)（超過 80% 可能代表軟體有記憶體洩漏問題，而非單純流量負載）。',
+      'Buffer Utilization (%)：代表 FPC 處理器用於緩衝內部訊息的空間占比，長期偏高值得留意訊息處理是否堆積。',
+      '建議三個欄位（CPU／Heap／Buffer）一起看，才能判斷 CPU 衝高的根本原因是流量、攻擊還是軟體本身異常。',
+    ] },
+  'Services PIC (MS-MPC)': { chapter: 'Chapter 4－JUNOS Platforms Hardware Troubleshooting', section: 'Displaying FPC Status', page: '4-24',
+    points: [
+      '服務卡（MS-MPC/MS-MIC）本質上也是一張 FPC，同樣可用 show chassis fpc detail 檢視其 CPU/Heap/Buffer Utilization。',
+      'Interrupt CPU Utilization (%) 偏高，代表衝高主因偏向封包中斷處理（如大量新連線/攻擊流量），而非常駐服務程序本身的計算負載。',
+      '書中建議搭配 show chassis fpc（不加 slot 編號）先看整機總覽，再用 detail 深入單一異常的服務卡。',
+    ] },
+  'Hardware I2C Error': { chapter: 'Chapter 4－JUNOS Platforms Hardware Troubleshooting', section: 'Displaying Environmental Information', page: '4-18',
+    points: [
+      'show chassis environment 顯示電源、風扇轉速與各元件溫度等環境資訊。',
+      'I2C 匯流排多用於讀取 SFP/FRU 上的環境與身分識別資料，若環境資訊本身正常（溫度/電壓/風扇皆正常），較支持 I2C 讀取錯誤只是暫時性通訊問題而非硬體損壞。',
+      '書中將環境檢視列為硬體排錯的基本步驟之一，建議在懷疑任何硬體錯誤前先執行此指令建立基準值（baseline）。',
+    ] },
+  'Resource Watermark': { chapter: 'Chapter 4－JUNOS Platforms Hardware Troubleshooting', section: 'Displaying FPC Status', page: '4-24',
+    points: [
+      '對應 show chassis fpc 的 Buffer Utilization (%) 欄位：FPC 處理器用於緩衝內部訊息的空間使用率。',
+      '書中未將此欄位列為告警門檻，而是建議長期觀察趨勢，數值持續走高才需留意是否有訊息堆積或處理瓶頸。',
+    ] },
+  'Interface Down': { chapter: 'Chapter 5－Interface Troubleshooting', section: 'Interface Case Study C：Ethernet Link Down', page: '5-92~94',
+    points: [
+      '書中列出 Ethernet 介面 Down 的三個常見成因：Misconfigured Ethernet parameters or incomplete auto-negotiations（設定錯誤或自動協商未完成）、Faulty PIC（PIC 故障）、Faulty interface wiring（配線故障）。',
+      'JUNOS Software 預設開啟 Ethernet 自動協商（autonegotiation enabled by default）。',
+      '案例排查步驟：用 show interfaces 檢視 ge-0/1/0 等介面的 media 資訊，範例中兩端協商狀態顯示為 Incomplete，因而鎖定為 Layer 2 協商不一致（mismatch）。',
+      '解法：確保本地與遠端裝置的自動協商設定一致（同時開啟或同時關閉並手動指定速率/雙工模式）後即可恢復。',
+    ] },
+  'Interface Up': { chapter: 'Chapter 5－Interface Troubleshooting', section: 'Displaying Input and Output Errors for the Interface', page: '5-14~15',
+    points: [
+      '書中建議用 show interfaces extensive 查看 Errors（進來的 frame abort 加上 FCS 錯誤總和）、Policed discards、L3 incompletes、L2 channel errors 等計數器。',
+      'L3 incompletes：進來的封包未通過 Layer 3（通常是 IPv4）標頭檢查時遞增，例如 IP header 不足 20 bytes。',
+      'L2 channel errors：軟體找不到對應該進入 frame 的有效邏輯介面（如 e3-1/2/3.0）時遞增。',
+      '介面剛恢復 Up 時，建議先用 clear interfaces statistics 歸零，再觀察這些計數器是否重新累積，確認是否為底層問題造成的抖動。',
+    ] },
+  'LACP State Change': { chapter: 'Chapter 5－Interface Troubleshooting', section: 'Standard Interface Status', page: '5-14',
+    points: [
+      '書中列出鏈路層協定旗標：Keepalives（是否啟用鏈路層 keepalive）、No-Keepalives（停用）、Give-Up（重試失敗後放棄連線）等。',
+      '這些旗標反映的是「鏈路層協定」層級的運作狀態，與 LACP 成員埠加入/退出聚合群組直接相關；LACP 抖動時應先確認這些旗標是否符合預期設定。',
+      '書中同時提醒，show interfaces（不加 terse/detail）會顯示裝置層級的流量負載與目前作用中的告警，可作為抖動當下的輔助佐證。',
+    ] },
+  'Optical Alarm': { chapter: 'Chapter 5－Interface Troubleshooting', section: 'Displaying Input and Output Errors for the Interface', page: '5-14~15',
+    points: [
+      '書中未針對光模組單獨成章，但建議任何介面層級異常（含光功率告警）都應先以 show interfaces extensive 確認 Errors 計數是否持續遞增。',
+      '若 Errors 計數同步遞增，代表問題不只是光功率量測值，而可能已造成實際 frame 層級的錯誤，應優先處理光纖端面或收發模組。',
+      '若 Errors 計數維持在 0、只有光功率量測值偏低，較可能是量測門檻設定過嚴或線路衰減臨界，可持續觀察。',
+    ] },
+  'default': { chapter: 'Chapter 3－Troubleshooting Tool Kit for JUNOS Platforms', section: 'Interpreting System Log Entries', page: '3-36~37',
+    points: [
+      '標準 syslog 格式（messages 檔）的每筆紀錄包含五個欄位：timestamp（時間）、name（設備名稱）、Process name or PID（產生訊息的程序）、message-code（訊息代碼）、message-text（補充說明文字）。',
+      '書中範例：CHASSISD_IFDEV_DETACH_FPC: ifdev_detach(1) 這類 message-code，可用 CLI 的 help 功能查詢其確切定義。',
+      '書中強調：透過查詢 message-code 可以判斷這則紀錄「屬於一般事件（event）還是真正的錯誤（error）」—— 例如上例其實只是 chassisd 正常中斷某 FPC 相關介面的處理程序，並非故障。',
+      '此方法適用於任何尚未被本工具分類辨識的日誌事件：先抓出 message-code，再用 CLI help 或官方 System Log Messages Reference 查證其定義。',
+    ] },
+};
+function bookReference(g){
+  const ref = BOOK_REFS[g.eventType] || BOOK_REFS.default;
+  return { bookChapter: ref.chapter, bookSection: ref.section, bookPage: ref.page, bookPoints: ref.points };
+}
+const KB_PORTAL = 'https://supportportal.juniper.net/s/global-search/';
+function kbSearchLink(term){ return KB_PORTAL + encodeURIComponent(term) + '#f-sf_primarysourcename=Knowledge&f-sf_articletype=Knowledge%20Base'; }
+const KB_REFS = {
+  'Hardware I2C Error': { term: 'I2C readback error', text: 'Juniper KB30474 指出 CHASSISD_I2CS_READBACK_ERROR／TCBC I2C accelerator error 常見於系統輪詢未插卡的 FPC 槽位或 SFP 未正確回應 I2C 請求，多屬 cosmetic 訊息，不代表硬體真的損壞；KB33993 建議進一步用 show chassis hardware 及 vty 的 show sfp list 找出實際觸發的 SFP，若特定 SFP 的 i2c failure count 持續非 0 才需更換。' },
+  'CPU Resource Alarm': { term: 'mspmand CPU zone change', text: 'Junos Release Notes 記載 mspmand（MS-MPC/MS-MIC 服務卡守護程序）在服務卡上下線頻繁切換、service-set 數量偏多且有大量硬體加密運算時可能異常或當機；CPU zone GREEN=>RED 通常代表瞬間流量或攻擊造成服務卡 CPU 衝高，建議對照當下是否有異常流量特徵。' },
+  'Authentication': { term: 'kex_exchange_identification', text: 'SSH kex_exchange_identification: Connection closed by remote host 代表遠端在金鑰交換完成前關閉連線，常見成因為健康檢查/掃描行為只做 TCP 連線測試而未完成握手、KexAlgorithms 不相容，或連線數超過 MaxStartups 限制；若來源為已知監控或掃描來源，可視為正常噪音而非攻擊或裝置異常。' },
+  'BFD State Change': { term: 'BFD flap', text: 'BFD 狀態抖動常與服務卡（datapath-traced/mspmand）連線中斷或重啟同時出現，屬控制平面連線問題觸發路由重收斂；建議對照同時間的 daemon 斷線紀錄，確認是否為服務卡本身異常而非鏈路問題。' },
+  'Chip/Memory Error': { term: 'LUCHIP IDMEM read error', text: 'LUCHIP/IDMEM 讀取錯誤為 PFE 晶片對記憶體完整性做週期性自我檢查所產生的訊息；官方 KB 說明此類錯誤若未持續增加、無伴隨封包遺失，通常視為記憶體自我修復事件，非硬體故障徵兆。' },
+  'Chip/Memory Error (Zone Disable)': { term: 'LMEM error Zone disable', text: 'LMEM 錯誤導致 PPE Zone 被系統自動停用，屬較嚴重的晶片記憶體錯誤保護機制；JTAC 官方建議是若錯誤已停止增加可持續觀察，若持續發生則需重啟該 FPC 卡板以清除 Zone 停用狀態。' },
+  'PFE Hardware Error': { term: 'PFE detected error nexthop trinity_pio', text: 'PFE Detected error nexthop / trinity_pio 訊息代表資料平面偵測到查表或記憶體存取異常，多數情況下 PFE 會自動以 jsim 重跑該筆查找並修復；官方文件將此類單次事件歸類為板卡自我修復，只有伴隨封包持續遺失或反覆出現才需要進一步排查。' },
+  'Optical Alarm': { term: 'SFP QSFP Rx power low', text: '光模組 Rx power 過低告警在官方文件中對應到光纖端面污損、對接模組不相容或線路衰減過大；若告警伴隨 set/cleared 快速交替（狂跳），建議清潔光纖端面並確認雙端收發器規格與距離是否匹配。' },
+  'LACP State Change': { term: 'LACP flap', text: 'LACP 狀態頻繁切換多與對接埠協商逾時或線路品質不穩有關；官方建議確認對接裝置 LACP timeout 設定（fast/slow）與韌體版本一致，避免因逾時誤判造成成員埠反覆進出聚合群組。' },
+  'Interface Down': { term: 'ifAdminStatus down', text: '介面 Down 事件對應 SNMP ifOperStatus 轉為 down(2)；若非計畫性維護觸發，需檢查對端裝置狀態、線路/光模組訊號，以及是否有 CoS/ACL 政策或保護倒換造成介面被動關閉。' },
+  'Interface Up': { term: 'ifAdminStatus up', text: '介面恢復 Up 對應 ifOperStatus up(1)；官方建議若同一介面在短時間內反覆出現 down/up（抖動），應視為線路或光模組不穩定的徵兆，而非單純的正常恢復。' },
+  'Resource Watermark': { term: 'buffer watermark', text: '系統資源水位（buffer/queue watermark）訊息屬 Junos 週期性資源使用量記錄機制，官方文件將其列為正常統計事件，不代表資源耗盡或異常，除非水位長期貼近上限。' },
+  'DDoS Event': { term: 'DDoS protection violation', text: 'DDoS protection 觸發的 socket 重連訊息代表控制平面保護機制偵測到流量超過該協定的設定門檻並執行限速；官方建議用 show ddos-protection protocols violations 確認觸發的協定與流量來源，評估是否為真實攻擊或門檻設定過低。' },
+  'OSPF': { term: 'OSPF neighbor state change', text: 'OSPF 鄰居狀態變化通常記錄在 Down/Init/2-Way/Full 之間的轉換；官方文件指出頻繁的鄰居狀態抖動多源自介面不穩定、Hello/Dead timer 不一致，或 MTU 不匹配導致 Exchange 階段失敗。' },
+  'BGP': { term: 'BGP neighbor down', text: 'BGP 鄰居 Down/Idle 事件常見成因為 Keepalive 逾時、對端主動重置（Notification）或底層路徑（BFD/介面）中斷；官方建議查看 show bgp neighbor 的 Last Error 欄位判斷是本端還是對端觸發。' },
+  'LSP/MPLS': { term: 'RSVP LSP down', text: 'RSVP/LDP LSP Down 事件通常源自路徑上某一跳的資源預留失敗或鏈路狀態變化；官方文件建議以 show rsvp session 與 show mpls lsp extensive 追蹤是哪一段路徑造成 LSP 重新信令。' },
+  'Policy': { term: 'firewall filter policy', text: '此類事件對應防火牆過濾條件或路由政策動作的記錄；官方文件建議對照對應的 policy-statement / filter 設定，確認是否為預期的流量分類或阻擋行為所產生的記錄。' },
+  'General': { term: 'syslog severity reference', text: '此事件未落入既有分類特徵，依 Junos 系統日誌規範，建議依訊息中的 daemon/tag 名稱與嚴重等級（Alert/Error/Warning 等）判斷影響範圍；下方連結已代入偵測到的 tag/daemon 關鍵字，可直接查看對應官方說明。' },
+  'default': { term: '', text: '此事件未落入既有分類特徵，依 Junos 系統日誌規範，建議依訊息中的 daemon/tag 名稱與嚴重等級判斷影響範圍；下方連結已代入偵測到的 tag/daemon 關鍵字，可直接查看對應官方說明。' }
+};
+function kbReference(g){
+  const ref = KB_REFS[g.eventType] || KB_REFS.default;
+  const term = ref.term || g.tag || g.eventType;
+  return { kbText: ref.text, kbTerm: term, kbLink: kbSearchLink(term) };
+}
+
+class Component extends DCLogic {
+  state = { rawFiles: [], loading: false, groups: {}, devices: {}, dayCounts: {}, moduleCounts: {}, severityTotals: {}, totalEntries: 0, totalLines: 0, downUpEvents: [], view: {kind:'dashboard'}, selectedKey: null, searchQuery: '', leftWidth: 200, rightWidth: 320, dragging: null };
+
+  componentDidMount(){
+    window.addEventListener('mousemove', this.handleDragMove);
+    window.addEventListener('mouseup', this.handleDragEnd);
+  }
+  componentWillUnmount(){
+    window.removeEventListener('mousemove', this.handleDragMove);
+    window.removeEventListener('mouseup', this.handleDragEnd);
+  }
+  startDragLeft = (e) => { e.preventDefault(); this.setState({ dragging: 'left' }); };
+  startDragRight = (e) => { e.preventDefault(); this.setState({ dragging: 'right' }); };
+  handleDragMove = (e) => {
+    if (!this.state.dragging) return;
+    if (this.state.dragging === 'left') {
+      this.setState({ leftWidth: Math.min(400, Math.max(140, e.clientX)) });
+    } else {
+      this.setState({ rightWidth: Math.min(640, Math.max(220, window.innerWidth - e.clientX)) });
+    }
+  };
+  handleDragEnd = () => { if (this.state.dragging) this.setState({ dragging: null }); };
+
+  handleFiles = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    this.setState({ loading: true });
+    Promise.all(files.map(f => f.text().then(t => ({ name: f.name, text: t }))))
+      .then(results => { setTimeout(() => this.processFiles(results), 30); });
+  };
+
+  processFiles = (results) => {
+    const rawFiles = [...(this.state.rawFiles || []), ...results];
+    const parsed = this.parseAll(rawFiles);
+    this.setState({ rawFiles, ...parsed, loading: false, view: { kind: 'dashboard' }, selectedKey: null });
+  };
+
+  resetAll = () => {
+    this.setState({ rawFiles: [], loading: false, groups: {}, devices: {}, dayCounts: {}, moduleCounts: {}, severityTotals: {}, totalEntries: 0, totalLines: 0, downUpEvents: [], view: { kind: 'dashboard' }, selectedKey: null, searchQuery: '' });
+  };
+
+  parseAll = (rawFiles) => {
+    const groups = {}, devices = {}, dayCounts = {}, moduleCounts = {}, severityTotals = { critical:0, error:0, warning:0, notice:0 };
+    const duTracker = {};
+    let totalEntries = 0, totalLines = 0;
+
+    const finalizeDeviceBlock = (mode, host, version, buffer) => {
+      if (!host) return;
+      if (!devices[host]) devices[host] = { hostname: host };
+      const text = buffer.join('\n');
+      if (version) devices[host].version = version;
+      if (mode === 'chassis') {
+        const model = text.match(/Model\s+(\S+)/); if (model) devices[host].model = model[1];
+        const mem = text.match(/Memory utilization\s+(\d+)\s*percent/); if (mem) devices[host].memUsage = mem[1] + '%';
+        const idle = text.match(/CPU utilization:[\s\S]*?Idle\s+(\d+)\s*percent/); if (idle) devices[host].cpuUsage = (100 - Number(idle[1])) + '%';
+        const parts = text.split(/^\s*Slot\s+(\d+):/m); const res = [];
+        for (let i = 1; i < parts.length; i += 2) {
+          const b = parts[i + 1] || ''; const cpu = (lbl) => { const x = b.match(new RegExp(lbl + ' CPU utilization:[\\s\\S]*?Idle\\s+(\\d+)\\s*percent')); return x ? 100 - Number(x[1]) : null; };
+          const st = b.match(/Current state\s+(\S+)/); const mm = b.match(/Memory utilization\s+(\d+)\s*percent/);
+          res.push({ slot: parts[i], state: st ? st[1] : '', mem: mm ? Number(mm[1]) : null, cpu5s: cpu('5 sec'), cpu1m: cpu('1 min'), cpu5m: cpu('5 min'), cpu15m: cpu('15 min') });
+        }
+        if (res.length) devices[host].res = res;
+      } else if (mode === 'fpc') {
+        const fpcs = []; const fpcBad = []; let fpcOnline = 0;
+        for (const l of buffer) {
+          const sx = l.match(/^\s*(\d+)\s+([A-Za-z][A-Za-z ]*?)(\s{2,}|\s+\d|$)/);
+          if (sx) { const s = sx[2].trim(); if (/^Online$/i.test(s)) fpcOnline++; else if (!/^Empty$/i.test(s)) fpcBad.push('FPC' + sx[1] + ' ' + s); }
+          const x = l.match(/^\s*(\d+)\s+Online\s+([\d\s]+)$/); if (!x) continue;
+          const n = x[2].trim().split(/\s+/).map(Number);
+          if (n.length >= 9) fpcs.push({ slot: x[1], cpu: n[1], m1: n[3], m5: n[4], m15: n[5], heap: n[7], buf: n[8] });
+          else if (n.length >= 6) fpcs.push({ slot: x[1], cpu: n[1], m1: null, m5: null, m15: null, heap: n[4], buf: n[5] });
+        }
+        if (fpcs.length) devices[host].fpcs = fpcs;
+        devices[host].fpcBad = fpcBad; devices[host].fpcOnline = fpcOnline; devices[host].fpcChecked = true;
+      } else if (mode === 'hw') {
+        if (buffer.some(l => /^Chassis\s+\S+/.test(l.trim()))) devices[host].hwOk = true;
+        else devices[host].hwOk = devices[host].hwOk || false;
+      } else if (mode === 'alarms') {
+        if (/No alarms currently active/.test(text)) devices[host].alarmCount = devices[host].alarmCount || 0;
+        else { const cm = text.match(/(\d+)\s+alarms currently active/); if (cm) devices[host].alarmCount = Number(cm[1]); }
+      }
+    };
+
+    for (const file of rawFiles) {
+      const lines = file.text.split(/\r?\n/);
+      let currentHost = null, currentVersion = null, mode = null, buffer = [], bufferHost = null;
+      for (const line of lines) {
+        totalLines++;
+        const pm = line.match(rePrompt);
+        if (pm) currentHost = pm[1];
+        const vm = line.match(/---\s*JUNOS\s+(\S+)/);
+        if (vm) currentVersion = vm[1];
+
+        if (/show chassis routing-engine/.test(line)) { if (mode) finalizeDeviceBlock(mode, bufferHost, currentVersion, buffer); mode = 'chassis'; buffer = []; bufferHost = currentHost; continue; }
+        if (/show chassis hardware/.test(line)) { if (mode) finalizeDeviceBlock(mode, bufferHost, currentVersion, buffer); mode = 'hw'; buffer = []; bufferHost = currentHost; continue; }
+        if (/show chassis fpc\s*(\|.*)?$/.test(line)) { if (mode) finalizeDeviceBlock(mode, bufferHost, currentVersion, buffer); mode = 'fpc'; buffer = []; bufferHost = currentHost; continue; }
+        if (/show system alarms/.test(line)) { if (mode) finalizeDeviceBlock(mode, bufferHost, currentVersion, buffer); mode = 'alarms'; buffer = []; bufferHost = currentHost; continue; }
+
+        if (mode) {
+          if ((line.trim() === '' && buffer.length > 0) || (pm && buffer.length > 0)) {
+            finalizeDeviceBlock(mode, bufferHost, currentVersion, buffer);
+            mode = null; buffer = [];
+            if (line.trim() === '') continue;
+          } else { buffer.push(line); continue; }
+        }
+
+        let m, entry = null;
+        if ((m = line.match(reDaemon))) {
+          entry = { ts: m[1], hostname: m[2], process: m[3], pid: m[4], facility: m[5], severity: Number(m[6]), tag: m[7] || '', message: m[8], raw: line };
+        } else if ((m = line.match(rePfe))) {
+          entry = { ts: m[1], hostname: m[2], process: '', pid: '', facility: m[3], severity: Number(m[4]), tag: '', message: m[5], raw: line };
+        } else if (reDatePrefix.test(line) && !pm) {
+          m = line.match(reOld);
+          if (m) {
+            const low = m[3].toLowerCase();
+            let sev = 5;
+            if (low.includes('alarm set') || low.includes('warning set') || low.includes('error')) sev = 3;
+            else if (low.includes('cleared')) sev = 6;
+            const baseH = (h) => String(h || '').replace(/[.\-_]re\d$/i, '').toLowerCase();
+            let hn = m[2], msg = m[3];
+            if (currentHost && baseH(hn) !== baseH(currentHost)) { hn = currentHost; msg = m[2] + ' ' + m[3]; }
+            entry = { ts: m[1], hostname: hn, process: '', pid: '', facility: 'PFE', severity: sev, tag: '', message: msg, raw: line };
+          }
+        }
+        if (!entry) continue;
+
+        entry.date = parseTs(entry.ts);
+        entry.module = classifyModule(entry);
+        entry.eventType = classifyEvent(entry);
+        entry.severityName = SEV_NAME[entry.severity] || 'Info';
+        const lowRaw = entry.raw.toLowerCase();
+        const kws = KEYWORDS.filter(k => lowRaw.includes(k));
+
+        const duState = detectDownUpState(entry.message);
+        if (duState && entry.date) {
+          const duIdent = extractDownUpIdentifier(entry.message);
+          if (duIdent) {
+            const dkey = entry.hostname + '|' + duIdent;
+            if (!duTracker[dkey]) duTracker[dkey] = { hostname: entry.hostname, identifier: duIdent, changes: [] };
+            duTracker[dkey].changes.push({ state: duState, date: entry.date, raw: entry.raw });
+          }
+        }
+
+        totalEntries++;
+        severityTotals[bucketOf(entry.severity)]++;
+        if (!moduleCounts[entry.module]) moduleCounts[entry.module] = { total: 0, critical: 0, error: 0, warning: 0, notice: 0 };
+        moduleCounts[entry.module].total++; moduleCounts[entry.module][bucketOf(entry.severity)]++;
+
+        if (entry.date) {
+          const dk = (entry.date.getMonth() + 1) + '/' + entry.date.getDate();
+          if (!dayCounts[dk]) dayCounts[dk] = { total: 0, critical: 0, dateObj: entry.date };
+          dayCounts[dk].total++; if (entry.severity <= 3) dayCounts[dk].critical++;
+        }
+
+        if (!devices[entry.hostname]) devices[entry.hostname] = { hostname: entry.hostname };
+        if (entry.severity <= 3) devices[entry.hostname].errorCount = (devices[entry.hostname].errorCount || 0) + 1;
+
+        const norm = normalizeMsg(entry.message);
+        const key = entry.hostname + '|' + (entry.tag || entry.facility) + '|' + norm.slice(0, 140);
+        let g = groups[key];
+        if (!g) {
+          g = groups[key] = { key, hostname: entry.hostname, module: entry.module, eventType: entry.eventType, tag: entry.tag, facility: entry.facility, severity: entry.severity, severityName: entry.severityName, count: 0, first: null, last: null, sample: entry.message, keywords: new Set(), raws: [], pid: '', iface: '', ip: '' };
+        }
+        g.count++;
+        if (entry.date && (!g.first || entry.date < g.first)) g.first = entry.date;
+        if (entry.date && (!g.last || entry.date > g.last)) g.last = entry.date;
+        if (entry.severity < g.severity) { g.severity = entry.severity; g.severityName = entry.severityName; }
+        kws.forEach(k => g.keywords.add(k));
+        if (entry.pid) g.pid = entry.pid;
+        const im = entry.message.match(reIface); if (im) g.iface = im[1];
+        const ipm = entry.message.match(reIp); if (ipm) g.ip = ipm[0];
+        if (g.raws.length < 50) g.raws.push(entry.raw);
+      }
+      if (mode) finalizeDeviceBlock(mode, bufferHost, currentVersion, buffer);
+    }
+
+    const downUpEvents = [];
+    Object.values(duTracker).forEach(t => {
+      const changes = t.changes.slice().sort((a, b) => a.date - b.date);
+      let current = null;
+      changes.forEach(c => {
+        if (c.state === 'down') {
+          if (!current) current = { hostname: t.hostname, identifier: t.identifier, downFirst: c.date, downLast: c.date, downCount: 1, downSample: c.raw };
+          else { current.downLast = c.date; current.downCount++; }
+        } else if (c.state === 'up') {
+          if (current) { downUpEvents.push({ ...current, upAt: c.date, recovered: true, upSample: c.raw }); current = null; }
+        }
+      });
+      if (current) downUpEvents.push({ ...current, upAt: null, recovered: false, upSample: '' });
+    });
+    downUpEvents.sort((a, b) => (a.recovered === b.recovered ? (b.downLast - a.downLast) : (a.recovered ? 1 : -1)));
+
+    return { groups, devices, dayCounts, moduleCounts, severityTotals, totalEntries, totalLines, downUpEvents };
+  };
+
+  onSearchChange = (e) => { this.setState({ searchQuery: e.target.value }); };
+  selectDashboard = () => { this.setState({ view: { kind: 'dashboard' }, selectedKey: null, searchQuery: '' }); };
+  selectDevices = () => { this.setState({ view: { kind: 'devices' }, selectedKey: null, searchQuery: '' }); };
+  selectAlertError = () => { this.setState({ view: { kind: 'severity', severities: [1, 3] }, selectedKey: null, searchQuery: '' }); };
+  selectCpuMem = () => { this.setState({ view: { kind: 'cpumem' }, selectedKey: null, searchQuery: '' }); };
+  toggleCmOnlyOver = () => { this.setState(s => ({ cmOnlyOver: !s.cmOnlyOver })); };
+  selectUrgent = () => { this.setState({ view: { kind: 'urgent' }, selectedKey: null, searchQuery: '' }); };
+  selectModule = (name) => { this.setState({ view: { kind: 'module', module: name }, selectedKey: null, searchQuery: '' }); };
+  selectGroup = (key) => { this.setState({ selectedKey: key }); };
+
+  computeVisibleGroups = () => {
+    const { groups, view, searchQuery } = this.state;
+    let arr = Object.values(groups).filter(g => !isIgnored(g));
+    const q = (searchQuery || '').trim().toLowerCase();
+    if (q) {
+      arr = arr.filter(g => g.hostname.toLowerCase().includes(q) || g.sample.toLowerCase().includes(q) || (g.tag || '').toLowerCase().includes(q) || g.pid.includes(q) || g.iface.toLowerCase().includes(q) || g.ip.includes(q) || [...g.keywords].some(k => k.includes(q)));
+    } else if (view.kind === 'module') {
+      arr = arr.filter(g => g.module === view.module);
+    } else if (view.kind === 'severity') {
+      arr = arr.filter(g => (view.severities || []).includes(g.severity));
+    } else if (view.kind === 'urgent') {
+      arr = arr.filter(g => urgentReason(g));
+    } else if (view.kind === 'linkdown') {
+      const open = new Set((this.state.downUpEvents || []).filter(e => !e.recovered).map(e => e.hostname + '|' + e.identifier));
+      arr = Object.values(groups).filter(g => {
+        if (detectDownUpState(g.sample) !== 'down') return false;
+        const id = extractDownUpIdentifier(g.sample);
+        return id && open.has(g.hostname + '|' + id);
+      });
+    }
+    if (view.kind === 'severity' || view.kind === 'urgent' || view.kind === 'linkdown') {
+      arr.sort((a, b) => a.severity - b.severity || (b.last || 0) - (a.last || 0) || b.count - a.count);
+    } else {
+      arr.sort((a, b) => (b.last || 0) - (a.last || 0) || b.count - a.count);
+    }
+    return arr;
+  };
+
+  exportExcel = () => {
+    const groups = Object.values(this.state.groups || {}).sort((a, b) => a.severity - b.severity || (b.last || 0) - (a.last || 0) || b.count - a.count);
+    const errRows = groups.map(g => [
+      xlCell('String', g.hostname), xlCell('String', g.severityName), xlCell('String', g.module), xlCell('String', g.eventType),
+      xlCell('String', g.tag || '-'), xlCell('Number', g.count), xlCell('String', fmtDT(g.first)), xlCell('String', fmtDT(g.last)),
+      xlCell('String', g.iface || '-'), xlCell('String', g.ip || '-'), xlCell('String', g.sample),
+    ]);
+    const errSheet = xlSheet('Error Log', ['Hostname','Severity','Module','EventType','Tag','Count','First','Last','Interface','IP','Message'], errRows);
+
+    const devices = Object.values(this.state.devices || {}).sort((a, b) => a.hostname.localeCompare(b.hostname));
+    const devRows = devices.map(d => [
+      xlCell('String', d.hostname), xlCell('String', d.version || '-'), xlCell('String', d.model || '-'),
+      xlCell('String', d.cpuUsage || '-'), xlCell('String', d.memUsage || '-'), xlCell('Number', d.alarmCount ?? 0), xlCell('Number', d.errorCount || 0),
+    ]);
+    const devSheet = xlSheet('CPU_Memory Usage', ['Hostname','Version','Model','CPU Usage','Memory Usage','Alarm Count','Error Count'], devRows);
+
+    const duRows = (this.state.downUpEvents || []).map(e => [
+      xlCell('String', e.hostname), xlCell('String', e.identifier), xlCell('String', fmtDT(e.downFirst)), xlCell('String', fmtDT(e.downLast)),
+      xlCell('Number', e.downCount), xlCell('String', e.recovered ? '是' : '否'), xlCell('String', e.recovered ? fmtDT(e.upAt) : '-'),
+      xlCell('String', e.downSample || ''), xlCell('String', e.upSample || ''),
+    ]);
+    const duSheet = xlSheet('Down-Up Events', ['Hostname','識別(介面/Session/Slot/IP)','Down 首次','Down 最後','次數','是否恢復Up','Up 時間','Down 樣本訊息','Up 樣本訊息'], duRows);
+
+    const xml = '<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?>'
+      + '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">'
+      + errSheet + devSheet + duSheet + '</Workbook>';
+    const blob = new Blob([xml], { type: 'application/vnd.ms-excel' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'juniper_log_analysis.xls';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  renderVals() {
+    const st = this.state;
+    const hasData = (st.rawFiles || []).length > 0;
+    const groupsObj = st.groups || {};
+    const devicesObj = st.devices || {};
+    const view = st.view || { kind: 'dashboard' };
+    const searchQuery = st.searchQuery || '';
+    const isSearching = searchQuery.trim() !== '';
+
+    const isDashboard = view.kind === 'dashboard' && !isSearching;
+    const isDevices = view.kind === 'devices' && !isSearching;
+    const isCpuMem = view.kind === 'cpumem' && !isSearching;
+    const isListView = !isDashboard && !isDevices && !isCpuMem;
+
+    const decorateGroup = (g) => ({
+      urgentReason: urgentReason(g) || '',
+      ...g,
+      keywordList: [...g.keywords],
+      sevColor: sevColor(g.severity),
+      isStorm: g.count >= 5,
+      timeRange: fmtDT(g.first) + ' → ' + fmtDT(g.last),
+      tagDisplay: (g.facility || '-') + (g.tag ? ('-' + g.tag) : ''),
+      pidDisplay: g.pid || '-',
+      ifDisplay: g.iface || '-',
+      ipDisplay: g.ip || '-',
+      note: suggestNote(g),
+      ...kbReference(g),
+      ...matchHistory(g),
+      ...cliReference(g),
+      ...bookReference(g),
+      select: () => this.selectGroup(g.key),
+      rowStyle: 'display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-bottom:1px solid oklch(0.25 0.012 260);cursor:pointer;background:' + (st.selectedKey === g.key ? 'oklch(0.26 0.02 235)' : 'transparent') + ';',
+      raws: (() => {
+        const ident = extractDownUpIdentifier(g.sample);
+        if (!ident) return g.raws;
+        const extra = (st.downUpEvents || [])
+          .filter(e => e.hostname === g.hostname && e.identifier === ident && e.upSample && !g.raws.includes(e.upSample))
+          .map(e => e.upSample);
+        return extra.length ? [...g.raws, ...extra].slice(0, 50) : g.raws;
+      })(),
+    });
+
+    const visibleGroups = this.computeVisibleGroups().map(decorateGroup);
+
+    const modules = Object.entries(st.moduleCounts || {}).sort((a, b) => b[1].total - a[1].total).map(([name, c]) => ({
+      name, count: c.total,
+      select: () => this.selectModule(name),
+      rowStyle: 'display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12.5px;margin-bottom:2px;background:' + (view.kind === 'module' && view.module === name ? 'oklch(0.28 0.02 235)' : 'transparent') + ';',
+      badgeStyle: 'font-size:11px;background:oklch(0.28 0.012 260);padding:1px 8px;border-radius:10px;color:oklch(0.75 0.01 260);',
+    }));
+
+    const dayEntries = Object.entries(st.dayCounts || {}).sort((a, b) => a[1].dateObj - b[1].dateObj);
+    const maxDay = Math.max(1, ...dayEntries.map(([, v]) => v.total));
+    const dashboardTrend = dayEntries.map(([day, v]) => ({ day, total: v.total, barHeight: Math.max(4, Math.round(v.total / maxDay * 150)) + 'px', criticalBarHeight: Math.max(0, Math.round(v.critical / maxDay * 150)) + 'px' }));
+
+    const maxModule = Math.max(1, ...Object.values(st.moduleCounts || {}).map(m => m.total));
+    const dashboardModuleDist = Object.entries(st.moduleCounts || {}).sort((a, b) => b[1].total - a[1].total).map(([name, c]) => ({ name, count: c.total, pct: Math.round(c.total / maxModule * 100) + '%' }));
+
+    const topRecurring = Object.values(groupsObj).sort((a, b) => b.count - a.count).slice(0, 10).map(g => ({ ...g, select: () => this.selectGroup(g.key) }));
+
+    const devicesArr = Object.values(devicesObj).sort((a, b) => a.hostname.localeCompare(b.hostname)).map(d => {
+      const errCount = d.errorCount || 0;
+      const cpuNum = d.cpuUsage ? parseInt(d.cpuUsage, 10) : null;
+      const memNum = d.memUsage ? parseInt(d.memUsage, 10) : null;
+      return {
+        hostname: d.hostname, version: d.version || '-', model: d.model || '-',
+        cpuUsage: d.cpuUsage || '-', memUsage: d.memUsage || '-', cpuNum, memNum,
+        cpuColor: cpuNum >= 80 ? RED : BLUE, memColor: memNum >= 80 ? RED : BLUE,
+        alarmCount: d.alarmCount ?? 0,
+        ...(() => {
+          const res = d.res || [];
+          const reText = res.length ? res.map(r => 'RE' + r.slot + ' ' + (r.state || '?')).join(' / ') : '-';
+          const reBad = res.some(r => (r.slot === '0' && r.state !== 'Master') || (r.slot === '1' && r.state !== 'Backup'));
+          const bad = d.fpcBad || [];
+          const hwText = !d.fpcChecked && d.hwOk === undefined ? '-'
+            : bad.length ? ('⚠ ' + bad.join(', '))
+            : d.hwOk === false ? '⚠ 無 hardware 輸出'
+            : ('正常' + (d.fpcChecked ? '(FPC ' + d.fpcOnline + ' Online)' : ''));
+          const hwBad = bad.length > 0 || d.hwOk === false;
+          return { reText, reColor: !res.length ? 'oklch(0.55 0.01 260)' : reBad ? RED : GREEN, hwText, hwColor: hwText === '-' ? 'oklch(0.55 0.01 260)' : hwBad ? RED : GREEN };
+        })(),
+        logStatus: errCount > 0 ? ('⚠ ' + errCount + ' 需關注') : 'Normal',
+        statusColor: errCount > 0 ? RED : GREEN,
+      };
+    });
+    const cpuTop = devicesArr.filter(d => d.cpuNum !== null).sort((a, b) => b.cpuNum - a.cpuNum).slice(0, 8);
+    const memTop = devicesArr.filter(d => d.memNum !== null).sort((a, b) => b.memNum - a.memNum).slice(0, 8);
+
+    const pctCell = (v) => v == null ? { text: '-', color: 'oklch(0.5 0.01 260)', weight: '400', bg: 'transparent' }
+      : v >= 80 ? { text: v + '%', color: 'oklch(0.8 0.17 25)', weight: '700', bg: 'oklch(0.62 0.21 25 / 0.22)' }
+      : { text: v + '%', color: 'oklch(0.85 0.006 260)', weight: '400', bg: 'transparent' };
+    const isOver = (vals) => vals.some(v => v != null && v >= 80);
+    const cmHosts = Object.values(devicesObj).map(d => {
+      const comps = [];
+      (d.res || []).forEach(r => comps.push({ comp: 'RE' + r.slot, state: r.state || '-', vals: [r.cpu5s, r.cpu1m, r.cpu5m, r.cpu15m, r.mem, null] }));
+      (d.fpcs || []).forEach(f => comps.push({ comp: 'FPC ' + f.slot, state: 'Online', vals: [f.cpu, f.m1, f.m5, f.m15, f.heap, f.buf] }));
+      return { host: d.hostname, comps, over: comps.some(c => isOver(c.vals)) };
+    }).filter(h => h.comps.length).sort((a, b) => (b.over - a.over) || a.host.localeCompare(b.host));
+    const cmOnlyOver = !!st.cmOnlyOver;
+    const cpuMemRows = [];
+    cmHosts.forEach(h => {
+      const list = cmOnlyOver ? h.comps.filter(c => isOver(c.vals)) : h.comps;
+      list.forEach((c, i) => cpuMemRows.push({ hostShow: i === 0 ? h.host : '', comp: c.comp, state: c.state, cells: c.vals.map(pctCell),
+        rowBg: isOver(c.vals) ? 'oklch(0.62 0.21 25 / 0.07)' : 'transparent', borderTop: i === 0 ? '1px solid oklch(0.34 0.012 260)' : '1px solid oklch(0.24 0.012 260)' }));
+    });
+    const cpuMemOverCount = cmHosts.reduce((s, h) => s + h.comps.filter(c => isOver(c.vals)).length, 0);
+
+    const downUpList = (st.downUpEvents || []).map(e => ({
+      hostname: e.hostname, identifier: e.identifier,
+      downFirst: fmtDT(e.downFirst), downLast: fmtDT(e.downLast), downCount: e.downCount,
+      upStatus: e.recovered ? '✅ 已恢復' : '❌ 尚未恢復',
+      upAt: e.recovered ? fmtDT(e.upAt) : '-',
+      statusColor: e.recovered ? GREEN : RED,
+      suggestion: e.recovered ? '-' : '建議增加 SNMP Trap 監控以即時告警',
+    }));
+    const hasDownUpEvents = downUpList.length > 0;
+    const unresolvedDownCount = downUpList.filter(d => d.upStatus.includes('尚未')).length;
+
+    const sevT = st.severityTotals || { critical: 0, error: 0, warning: 0, notice: 0 };
+    const statChips = [
+      { label: '檔案', value: (st.rawFiles || []).length, color: 'oklch(0.9 0.006 260)' },
+      { label: 'Critical', value: sevT.critical, color: RED },
+      { label: 'Error', value: sevT.error, color: ORANGE },
+      { label: 'Warning', value: sevT.warning, color: YELLOW },
+    ];
+    const summaryCards = [
+      { label: 'Critical', value: sevT.critical, color: RED },
+      { label: 'Error', value: sevT.error, color: ORANGE },
+      { label: 'Warning', value: sevT.warning, color: YELLOW },
+    ];
+
+    const keywordChips = [
+      ...KEYWORDS.map(k => ({ label: k, select: () => this.setState({ searchQuery: k, view: { kind: 'search' } }) })),
+      { label: 'link_down', select: () => this.setState({ searchQuery: '', view: { kind: 'linkdown' }, selectedKey: null }) },
+    ];
+
+    const selectedGroupRaw = st.selectedKey ? groupsObj[st.selectedKey] : null;
+    const selectedGroup = selectedGroupRaw ? decorateGroup(selectedGroupRaw) : null;
+
+    return {
+      hasData, loading: st.loading,
+      searchQuery,
+      startDragLeft: this.startDragLeft, startDragRight: this.startDragRight,
+      leftPanelStyle: 'width:' + st.leftWidth + 'px;flex-shrink:0;border-right:1px solid oklch(0.3 0.012 260);overflow-y:auto;padding:14px 10px;background:oklch(0.185 0.012 260);',
+      rightPanelStyle: 'width:' + st.rightWidth + 'px;flex-shrink:0;border-left:1px solid oklch(0.3 0.012 260);overflow-y:auto;padding:18px;background:oklch(0.185 0.012 260);',
+      handleFiles: this.handleFiles, onSearchChange: this.onSearchChange, resetAll: this.resetAll,
+      exportExcel: this.exportExcel,
+      selectDashboard: this.selectDashboard, selectDevices: this.selectDevices, selectAlertError: this.selectAlertError,
+      dashboardNavStyle: 'padding:9px 10px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;margin-bottom:4px;background:' + (isDashboard ? 'oklch(0.28 0.02 235)' : 'transparent') + ';',
+      devicesNavStyle: 'padding:9px 10px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;margin-bottom:4px;background:' + (isDevices ? 'oklch(0.28 0.02 235)' : 'transparent') + ';',
+      alertErrorNavStyle: 'padding:9px 10px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;margin-bottom:4px;color:oklch(0.75 0.18 25);background:' + (view.kind === 'severity' && !isSearching ? 'oklch(0.3 0.1 25)' : 'transparent') + ';',
+      alertErrorCount: Object.values(groupsObj).filter(g => g.severity === 1 || g.severity === 3).reduce((s, g) => s + g.count, 0),
+      deviceCount: Object.keys(devicesObj).length,
+      selectUrgent: this.selectUrgent,
+      urgentCount: Object.values(groupsObj).filter(g => urgentReason(g)).length,
+      urgentNavStyle: 'padding:9px 10px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:700;margin-bottom:4px;color:oklch(0.8 0.19 25);border:1px solid oklch(0.62 0.21 25 / 0.45);background:' + (view.kind === 'urgent' && !isSearching ? 'oklch(0.62 0.21 25 / 0.28)' : 'oklch(0.62 0.21 25 / 0.1)') + ';',
+      modules, keywordChips,
+      isDashboard, isDevices, isListView,
+      listTitle: isSearching ? ('搜尋結果：「' + searchQuery + '」') : (view.kind === 'linkdown' ? 'link_down(尚未恢復)' : view.kind === 'urgent' ? '⚠ 緊急處理' : view.kind === 'severity' ? 'Alert / Error' : (view.module || '模組')),
+      statChips, summaryCards,
+      dashboardTrend, dashboardModuleDist, topRecurring,
+      cpuTop, memTop,
+      isCpuMem, cpuMemRows, cpuMemOverCount, hasCpuMemRows: cpuMemRows.length > 0, noCpuMemRows: cpuMemRows.length === 0,
+      selectCpuMem: this.selectCpuMem, toggleCmOnlyOver: this.toggleCmOnlyOver,
+      cmOnlyOverLabel: cmOnlyOver ? '✓ 只看超標' : '只看超標',
+      cmOnlyOverStyle: 'font-size:11.5px;padding:4px 10px;border-radius:12px;cursor:pointer;border:1px solid ' + (cmOnlyOver ? 'oklch(0.62 0.21 25 / 0.6)' : 'oklch(0.34 0.012 260)') + ';background:' + (cmOnlyOver ? 'oklch(0.62 0.21 25 / 0.2)' : 'oklch(0.25 0.012 260)') + ';color:' + (cmOnlyOver ? 'oklch(0.8 0.17 25)' : 'oklch(0.85 0.006 260)') + ';',
+      cpuMemNavStyle: 'padding:9px 10px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;margin-bottom:4px;display:flex;justify-content:space-between;gap:6px;background:' + (isCpuMem ? 'oklch(0.28 0.02 235)' : 'transparent') + ';',
+      cpuMemNavBadge: cpuMemOverCount > 0 ? ('⚠ ' + cpuMemOverCount) : '', hasCpuMemOver: cpuMemOverCount > 0,
+      downUpList, hasDownUpEvents, unresolvedDownCount,
+      devicesArr,
+      visibleGroups,
+      selectedGroup,
+    };
+  }
+}
+
+</script>
+</body>
+</html>
