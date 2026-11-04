@@ -228,7 +228,12 @@
         </sc-if>
 
         <sc-if value="{{isListView}}" hint-placeholder-val="{{false}}">
-          <div style="font-size:14px;font-weight:700;margin:0 0 12px;">{{listTitle}}（{{visibleGroups.length}} 筆彙整）</div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px;">
+            <div style="font-size:14px;font-weight:700;">{{listTitle}}（{{visibleGroups.length}} 筆彙整）</div>
+            <sc-if value="{{hasLowPriority}}" hint-placeholder-val="{{false}}">
+              <div onClick="{{toggleLowPriority}}" title="登入、BGP/LSP 一般訊息、kernel 等例行訊息；中斷類與 Critical 以上事件不會被收起" style="{{lowPriorityStyle}}">{{lowPriorityLabel}}</div>
+            </sc-if>
+          </div>
           <sc-for list="{{visibleGroups}}" as="g" hint-placeholder-count="8">
             <div onClick="{{g.select}}" style="{{g.rowStyle}}">
               <div style="width:4px;align-self:stretch;border-radius:2px;background:{{g.sevColor}};flex-shrink:0;"></div>
@@ -242,6 +247,9 @@
                   </sc-if>
                   <sc-if value="{{g.isStorm}}" hint-placeholder-val="{{false}}">
                     <span style="font-size:10.5px;padding:1px 7px;border-radius:10px;background:oklch(0.3 0.012 260);color:oklch(0.78 0.15 95);white-space:nowrap;flex-shrink:0;">🔁 狂跳</span>
+                  </sc-if>
+                  <sc-if value="{{g.isLowPriority}}" hint-placeholder-val="{{false}}">
+                    <span style="font-size:10.5px;padding:1px 7px;border-radius:10px;background:oklch(0.28 0.012 260);color:oklch(0.62 0.01 260);white-space:nowrap;flex-shrink:0;">低優先</span>
                   </sc-if>
                   <sc-if value="{{g.isSeen}}" hint-placeholder-val="{{false}}">
                     <span style="font-size:10.5px;padding:1px 7px;border-radius:10px;background:oklch(0.72 0.15 150 / 0.18);color:oklch(0.8 0.13 150);border:1px solid oklch(0.72 0.15 150 / 0.4);white-space:nowrap;flex-shrink:0;">{{g.seenLabel}}</span>
@@ -312,6 +320,56 @@
             </sc-for>
           </div>
 
+          <sc-if value="{{selectedGroup.urgentReason}}" hint-placeholder-val="{{false}}">
+            <div style="font-size:12px;font-weight:700;color:oklch(0.8 0.17 25);background:oklch(0.62 0.21 25 / 0.15);border:1px solid oklch(0.62 0.21 25 / 0.4);border-radius:6px;padding:8px 10px;margin-bottom:14px;">⚠ 緊急：{{selectedGroup.urgentReason}}</div>
+          </sc-if>
+
+          <div style="margin-bottom:16px;">
+            <div style="font-size:12px;font-weight:700;margin-bottom:6px;color:oklch(0.75 0.01 260);">💡 處理建議</div>
+            <div style="font-size:12px;line-height:1.7;color:oklch(0.85 0.006 260);">{{selectedGroup.note}}</div>
+          </div>
+
+          <div style="margin-bottom:16px;">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+              <div style="font-size:12px;font-weight:700;color:oklch(0.75 0.01 260);">🕘 歷史案例</div>
+              <span style="font-size:10.5px;padding:1px 8px;border-radius:10px;background:{{selectedGroup.histBadgeBg}};color:{{selectedGroup.histBadgeColor}};">{{selectedGroup.histBadgeLabel}}</span>
+            </div>
+            <div style="font-size:12px;line-height:1.7;color:oklch(0.8 0.006 260);">{{selectedGroup.histNote}}</div>
+            <sc-if value="{{selectedGroup.histFound}}" hint-placeholder-val="{{false}}">
+              <div style="margin-top:6px;display:flex;flex-direction:column;gap:3px;">
+                <sc-for list="{{selectedGroup.histCases}}" as="hc" hint-placeholder-count="2">
+                  <div style="font-size:11px;color:oklch(0.65 0.01 260);font-family:ui-monospace,Menlo,Consolas,monospace;">{{hc.date}}　{{hc.hostname}}</div>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+
+          <div style="margin-bottom:16px;">
+            <div style="font-size:12px;font-weight:700;margin-bottom:6px;color:oklch(0.75 0.01 260);">⌨ 建議執行指令</div>
+            <div style="display:flex;flex-direction:column;gap:4px;">
+              <sc-for list="{{selectedGroup.cliCmds}}" as="cmd" hint-placeholder-count="3">
+                <code style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;color:oklch(0.85 0.1 150);background:oklch(0.14 0.01 260);border:1px solid oklch(0.27 0.012 260);border-radius:5px;padding:5px 8px;white-space:pre-wrap;word-break:break-all;">{{cmd.text}}</code>
+              </sc-for>
+            </div>
+            <a href="{{selectedGroup.cliLink}}" target="_blank" rel="noopener noreferrer" style="display:inline-block;font-size:11px;margin-top:6px;">Junos 指令官方文件 ↗</a>
+          </div>
+
+          <div style="margin-bottom:16px;">
+            <div style="font-size:12px;font-weight:700;margin-bottom:6px;color:oklch(0.75 0.01 260);">📘 官方知識庫說明</div>
+            <div style="font-size:12px;line-height:1.7;color:oklch(0.8 0.006 260);">{{selectedGroup.kbText}}</div>
+            <a href="{{selectedGroup.kbLink}}" target="_blank" rel="noopener noreferrer" style="display:inline-block;font-size:11px;margin-top:6px;">在 Juniper 知識庫搜尋「{{selectedGroup.kbTerm}}」↗</a>
+          </div>
+
+          <div style="margin-bottom:18px;">
+            <div style="font-size:12px;font-weight:700;margin-bottom:4px;color:oklch(0.75 0.01 260);">📖 參考書籍重點</div>
+            <div style="font-size:11px;color:oklch(0.6 0.01 260);margin-bottom:6px;">{{selectedGroup.bookChapter}} ・ {{selectedGroup.bookSection}} ・ p.{{selectedGroup.bookPage}}</div>
+            <div style="display:flex;flex-direction:column;gap:5px;">
+              <sc-for list="{{selectedGroup.bookPoints}}" as="bp" hint-placeholder-count="3">
+                <div style="font-size:11.5px;line-height:1.65;color:oklch(0.78 0.006 260);padding-left:10px;border-left:2px solid oklch(0.34 0.012 260);">{{bp}}</div>
+              </sc-for>
+            </div>
+          </div>
+
           <div style="font-size:12px;font-weight:700;margin-bottom:6px;color:oklch(0.75 0.01 260);">原始日誌（最多顯示 50 筆）</div>
           <div style="display:flex;flex-direction:column;gap:6px;">
             <sc-for list="{{selectedGroup.raws}}" as="raw" hint-placeholder-count="3">
@@ -361,6 +419,7 @@ const URGENT_RULES = [
   { re: /fpc.*(offline|restart|reboot|crash|panic)|vmcore|core[- ]?dump|kernel panic/i, not: /by cli command|is_resync_ready/i, reason: 'FPC/程序異常重啟' },
   { re: /laser bias current low|(tx|rx) power (low|high).*alarm set/i, reason: '光模組劣化' },
   { re: /Up -> Down|state:?\s*Down|went down|link ?down/i, not: /alarm clear/i, reason: '鏈路/Session 中斷' },
+  { re: /from established|(bgp|ospf|isis|ldp).*(->\s*idle|to idle|\bdown\b)|(lsp|rsvp).*\bdown\b/i, reason: '路由鄰居/LSP 中斷' },
   { re: /alarm set.*(color=RED|major)/i, reason: 'Major 告警未解除' },
   { re: /fabric|train rx failed|parity|ecc|uncorrectable|fatal/i, reason: '交換結構/晶片錯誤' },
   { re: /(pem|power supply|fan).*(fail|absent)|temperature.*(high|hot|exceed)|overheat/i, reason: '電源/風扇/溫度' },
@@ -373,10 +432,16 @@ function urgentReason(g){
   return null;
 }
 const KEEP_RE = /i2c|pcf/i;
+// 即使符合 IGNORE_RE 也一定要顯示的重要事件（鄰居/LSP 中斷、當機等）
+const IMPORTANT_RE = /\bdown\b|from established|->\s*idle|to idle|went down|panic|crash|core[- ]?dump|vmcore/i;
+// 「低優先」：例行雜訊（登入、BGP/LSP 一般訊息、kernel 等），預設收起，可在清單上方打開
 function isIgnored(g){
   const text = [g.sample, g.tag, g.process, g.module, g.eventType].filter(Boolean).join(' ');
   if (/kernel|%kern/i.test(text) && KEEP_RE.test(text)) return false;
-  return IGNORE_RE.test(text);
+  if (!IGNORE_RE.test(text)) return false;
+  if (g.severity <= 2) return false;           // Emergency / Alert / Critical 一律顯示
+  if (IMPORTANT_RE.test(text)) return false;   // 中斷類事件一律顯示
+  return true;
 }
 const KEYWORDS = ['chip','error','alarm','fail','warning','mqss','fpc'];
 const RED = 'oklch(0.62 0.21 25)';
@@ -887,8 +952,9 @@ class Component extends DCLogic {
   onSearchChange = (e) => { this.setState({ searchQuery: e.target.value }); };
   selectDashboard = () => { this.setState({ view: { kind: 'dashboard' }, selectedKey: null, searchQuery: '' }); };
   selectDevices = () => { this.setState({ view: { kind: 'devices' }, selectedKey: null, searchQuery: '' }); };
-  selectAlertError = () => { this.setState({ view: { kind: 'severity', severities: [1, 3] }, selectedKey: null, searchQuery: '' }); };
+  selectAlertError = () => { this.setState({ view: { kind: 'severity', severities: [0, 1, 2, 3] }, selectedKey: null, searchQuery: '' }); };
   selectCpuMem = () => { this.setState({ view: { kind: 'cpumem' }, selectedKey: null, searchQuery: '' }); };
+  toggleLowPriority = () => { this.setState(s => ({ showLowPriority: !s.showLowPriority })); };
   toggleCmOnlyOver = () => { this.setState(s => ({ cmOnlyOver: !s.cmOnlyOver })); };
   selectUrgent = () => { this.setState({ view: { kind: 'urgent' }, selectedKey: null, searchQuery: '' }); };
   selectModule = (name) => { this.setState({ view: { kind: 'module', module: name }, selectedKey: null, searchQuery: '' }); };
@@ -900,7 +966,8 @@ class Component extends DCLogic {
     const q = (searchQuery || '').trim().toLowerCase();
     // 沒在搜尋時，隱藏已看過的（目前正在看的那筆先留著，換別筆後才消失）
     const hideSeen = (g) => q || g.key === selectedKey || !isSeenGroup(g, seen);
-    let arr = Object.values(groups).filter(g => !isIgnored(g) && hideSeen(g));
+    const showLow = !!this.state.showLowPriority;
+    let arr = Object.values(groups).filter(g => (showLow || q || !isIgnored(g)) && hideSeen(g));
     if (q) {
       arr = arr.filter(g => g.hostname.toLowerCase().includes(q) || g.sample.toLowerCase().includes(q) || (g.tag || '').toLowerCase().includes(q) || g.pid.includes(q) || g.iface.toLowerCase().includes(q) || g.ip.includes(q) || [...g.keywords].some(k => k.includes(q)));
     } else if (view.kind === 'module') {
@@ -987,6 +1054,7 @@ class Component extends DCLogic {
       urgentReason: urgentReason(g) || '',
       ...g,
       isSeen: !!seen[g.key],
+      isLowPriority: isIgnored(g),
       seenLabel: seen[g.key] ? ('✓ 已看過 ' + fmtFull(seen[g.key].seenAt)) : '',
       keywordList: [...g.keywords],
       sevColor: sevColor(g.severity),
@@ -1118,6 +1186,7 @@ class Component extends DCLogic {
       rowStyle: 'display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-bottom:1px solid oklch(0.25 0.012 260);cursor:' + (groupsObj[key] ? 'pointer' : 'default') + ';background:' + (st.selectedKey === key ? 'oklch(0.26 0.02 235)' : 'transparent') + ';',
     }));
     const seenHiddenCount = Object.values(groupsObj).filter(g => !isIgnored(g) && isSeenGroup(g, seen)).length;
+    const lowPriorityCount = Object.values(groupsObj).filter(g => isIgnored(g) && notSeen(g)).length;
 
     const selectedGroupRaw = st.selectedKey ? groupsObj[st.selectedKey] : null;
     const selectedGroup = selectedGroupRaw ? decorateGroup(selectedGroupRaw) : null;
@@ -1134,7 +1203,11 @@ class Component extends DCLogic {
       dashboardNavStyle: 'padding:9px 10px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;margin-bottom:4px;background:' + (isDashboard ? 'oklch(0.28 0.02 235)' : 'transparent') + ';',
       devicesNavStyle: 'padding:9px 10px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;margin-bottom:4px;background:' + (isDevices ? 'oklch(0.28 0.02 235)' : 'transparent') + ';',
       alertErrorNavStyle: 'padding:9px 10px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;margin-bottom:4px;color:oklch(0.75 0.18 25);background:' + (view.kind === 'severity' && !isSearching ? 'oklch(0.3 0.1 25)' : 'transparent') + ';',
-      alertErrorCount: Object.values(groupsObj).filter(g => (g.severity === 1 || g.severity === 3) && !isIgnored(g) && notSeen(g)).reduce((s, g) => s + g.count, 0),
+      alertErrorCount: Object.values(groupsObj).filter(g => g.severity <= 3 && !isIgnored(g) && notSeen(g)).reduce((s, g) => s + g.count, 0),
+      lowPriorityCount, hasLowPriority: lowPriorityCount > 0,
+      toggleLowPriority: this.toggleLowPriority,
+      lowPriorityLabel: (st.showLowPriority ? '✓ ' : '') + '顯示低優先日誌（' + lowPriorityCount + '）',
+      lowPriorityStyle: 'font-size:11.5px;padding:4px 10px;border-radius:12px;cursor:pointer;white-space:nowrap;border:1px solid ' + (st.showLowPriority ? 'oklch(0.68 0.14 235 / 0.6)' : 'oklch(0.34 0.012 260)') + ';background:' + (st.showLowPriority ? 'oklch(0.68 0.14 235 / 0.18)' : 'oklch(0.25 0.012 260)') + ';color:' + (st.showLowPriority ? 'oklch(0.8 0.1 235)' : 'oklch(0.75 0.01 260)') + ';',
       isSeenView, seenList, seenTotal: seenList.length, hasSeen: seenList.length > 0, noSeen: seenList.length === 0,
       seenHiddenCount, hasSeenHidden: seenHiddenCount > 0,
       selectSeenHistory: this.selectSeenHistory, clearSeen: this.clearSeen,
@@ -1145,7 +1218,7 @@ class Component extends DCLogic {
       urgentNavStyle: 'padding:9px 10px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:700;margin-bottom:4px;color:oklch(0.8 0.19 25);border:1px solid oklch(0.62 0.21 25 / 0.45);background:' + (view.kind === 'urgent' && !isSearching ? 'oklch(0.62 0.21 25 / 0.28)' : 'oklch(0.62 0.21 25 / 0.1)') + ';',
       modules, keywordChips,
       isDashboard, isDevices, isListView,
-      listTitle: isSearching ? ('搜尋結果：「' + searchQuery + '」') : (view.kind === 'linkdown' ? 'link_down(尚未恢復)' : view.kind === 'urgent' ? '⚠ 緊急處理' : view.kind === 'severity' ? 'Alert / Error' : (view.module || '模組')),
+      listTitle: isSearching ? ('搜尋結果：「' + searchQuery + '」') : (view.kind === 'linkdown' ? 'link_down(尚未恢復)' : view.kind === 'urgent' ? '⚠ 緊急處理' : view.kind === 'severity' ? 'Alert / Error（含 Emergency、Critical）' : (view.module || '模組')),
       statChips, summaryCards,
       dashboardTrend, dashboardModuleDist, topRecurring,
       cpuTop, memTop,
