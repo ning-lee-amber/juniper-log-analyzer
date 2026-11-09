@@ -41,6 +41,8 @@
         </sc-for>
       </div>
       <button onClick="{{exportExcel}}" style="background:oklch(0.24 0.012 260);border:1px solid oklch(0.34 0.012 260);color:oklch(0.9 0.006 260);padding:8px 12px;border-radius:6px;font-size:12px;cursor:pointer;white-space:nowrap;flex-shrink:0;">匯出 Excel</button>
+      <button onClick="{{exportDailyCheck}}" title="依 Daily Check 規則產生當天的 Excel（清單固定順序、Memory 在 CPU 前、整數 %、未恢復 down 才標黃）" style="background:oklch(0.68 0.14 235);border:1px solid oklch(0.68 0.14 235);color:oklch(0.15 0.01 260);font-weight:600;padding:8px 12px;border-radius:6px;font-size:12px;cursor:pointer;white-space:nowrap;flex-shrink:0;">Daily Check 匯出</button>
+      <label title="匯入上一份 Daily check Excel（或 txt/csv：名稱,版本,型號），清單只存在這台電腦的瀏覽器" style="background:oklch(0.24 0.012 260);border:1px solid oklch(0.34 0.012 260);color:oklch(0.9 0.006 260);padding:8px 12px;border-radius:6px;font-size:12px;cursor:pointer;white-space:nowrap;flex-shrink:0;">設定 Daily 清單<input type="file" accept=".xlsx,.txt,.csv" onChange="{{importDailyList}}" style="display:none;" /></label>
       <button onClick="{{resetAll}}" style="background:transparent;border:1px solid oklch(0.34 0.012 260);color:oklch(0.65 0.01 260);padding:8px 12px;border-radius:6px;font-size:12px;cursor:pointer;white-space:nowrap;flex-shrink:0;">清除</button>
     </sc-if>
   </div>
@@ -650,6 +652,74 @@ function matchHistory(g, custom){
   return { histFound: true, histNote: notes.join(' '), histCases: cases, histBadgeLabel: badge, histBadgeBg: 'oklch(0.3 0.1 55 / 0.4)', histBadgeColor: 'oklch(0.75 0.15 55)' };
 }
 
+// ===== Daily Check（F1）規則：全部寫在這裡，不需要 AI =====
+// 設備清單與忽略清單「不寫在程式裡」：由使用者在網頁上匯入，只存在這台電腦的瀏覽器（localStorage）
+const DAILY_STORE_KEY = 'jla_daily_cfg_v1';
+const DAILY_THRESHOLD = 80;                    // CPU / Memory 門檻（只在 log Analysis 註明，不標黃）
+function loadDaily(){
+  try { const v = JSON.parse(localStorage.getItem(DAILY_STORE_KEY) || '{}'); return { list: Array.isArray(v.list) ? v.list : [], ignore: Array.isArray(v.ignore) ? v.ignore : [] }; }
+  catch { return { list: [], ignore: [] }; }
+}
+function saveDaily(cfg){ try { localStorage.setItem(DAILY_STORE_KEY, JSON.stringify(cfg)); } catch {} }
+// 讀 .xlsx（不需外部套件：解 ZIP + 瀏覽器內建 deflate-raw 解壓）
+async function readXlsxRows(buf){
+  const u8 = new Uint8Array(buf), dv = new DataView(buf);
+  let eocd = -1; for (let i = u8.length - 22; i >= 0; i--) if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  if (eocd < 0) throw new Error('不是有效的 xlsx 檔');
+  const n = dv.getUint16(eocd + 10, true); let p = dv.getUint32(eocd + 16, true); const entries = {};
+  const dec = new TextDecoder();
+  for (let k = 0; k < n; k++) {
+    const method = dv.getUint16(p + 10, true), csize = dv.getUint32(p + 20, true), nl = dv.getUint16(p + 28, true), el = dv.getUint16(p + 30, true), cl = dv.getUint16(p + 32, true), off = dv.getUint32(p + 42, true);
+    entries[dec.decode(u8.subarray(p + 46, p + 46 + nl))] = { method, csize, off };
+    p += 46 + nl + el + cl;
+  }
+  const read = async (name) => {
+    const e = entries[name]; if (!e) return null;
+    const start = e.off + 30 + dv.getUint16(e.off + 26, true) + dv.getUint16(e.off + 28, true);
+    const data = u8.subarray(start, start + e.csize);
+    if (e.method === 0) return dec.decode(data);
+    const ds = new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    return await new Response(ds).text();
+  };
+  const xml = t => new DOMParser().parseFromString(t, 'application/xml');
+  const wb = xml(await read('xl/workbook.xml')), rels = xml(await read('xl/_rels/workbook.xml.rels'));
+  const relMap = {}; [...rels.getElementsByTagName('Relationship')].forEach(r => relMap[r.getAttribute('Id')] = r.getAttribute('Target'));
+  const sheets = [...wb.getElementsByTagName('sheet')].map(sh => ({ name: sh.getAttribute('name'), target: relMap[sh.getAttribute('r:id')] || '' }));
+  const daySheets = sheets.filter(sh => /^\d{7}$/.test(sh.name));
+  const pick = daySheets.length ? daySheets[daySheets.length - 1] : sheets[0];
+  const ssTxt = await read('xl/sharedStrings.xml');
+  const ss = ssTxt ? [...xml(ssTxt).getElementsByTagName('si')].map(si => [...si.getElementsByTagName('t')].map(t => t.textContent).join('')) : [];
+  const path = pick.target.startsWith('/') ? pick.target.slice(1) : 'xl/' + pick.target.replace(/^\.\//, '');
+  const doc = xml(await read(path)); const rows = [];
+  [...doc.getElementsByTagName('row')].forEach(r => {
+    const out = [];
+    [...r.getElementsByTagName('c')].forEach(c => {
+      const col = (c.getAttribute('r') || '').replace(/\d+/g, ''); let ci = 0; for (const ch of col) ci = ci * 26 + ch.charCodeAt(0) - 64; ci--;
+      const t = c.getAttribute('t'), v = c.getElementsByTagName('v')[0];
+      let val = t === 's' ? ss[Number(v && v.textContent)] : t === 'inlineStr' ? [...c.getElementsByTagName('t')].map(x => x.textContent).join('') : (v ? v.textContent : '');
+      if (ci >= 0) out[ci] = val == null ? '' : String(val);
+    });
+    rows.push(out);
+  });
+  return { sheet: pick.name, rows };
+}
+// 從 Daily check 表取出 F1 區塊（F1 那列之後，到下一個「QTY:」區塊或空白列為止）
+function dailyListFromRows(rows){
+  const start = rows.findIndex(r => String(r[0] || '').trim().toUpperCase() === 'F1');
+  const list = [];
+  for (let i = start + 1; i < rows.length; i++) {
+    const r = rows[i] || []; const name = String(r[0] || '').trim();
+    if (!name || /^QTY/i.test(String(r[1] || '').trim())) { if (start >= 0) break; else continue; }
+    if (start < 0 && /^(version|設備)/i.test(String(r[1] || '') + name)) continue;
+    list.push([name, String(r[1] || '').trim(), String(r[2] || '').trim()]);
+  }
+  return list;
+}
+// 比對用：去掉 RE0/RE1/node0/node1 後綴、去掉數字前導 0（ABC.RTR001 = ABC.RTR1）、不分大小寫
+function dailyBase(h){ return String(h || '').trim().replace(/[._\-](re\d|node\d)$/i, '').toLowerCase().replace(/(^|[^\d])0+(?=\d)/g, '$1'); }
+function rocDate(d){ const p = n => String(n).padStart(2, '0'); return String(d.getFullYear() - 1911) + p(d.getMonth() + 1) + p(d.getDate()); }
+function physIf(id){ return String(id).replace(/^if:/, '').replace(/\.\d+$/, ''); }
+
 // ===== 匯出 .xlsx（不需外部套件：自己組 Office Open XML + ZIP）=====
 const CRC_TABLE = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
 function crc32(buf){ let c = 0xFFFFFFFF; for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
@@ -672,7 +742,7 @@ function zipStore(files){
 }
 function xmlEsc(s){ return String(s == null ? '' : s).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 function colName(i){ let s = ''; i++; while (i > 0) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; }
-function sheetXml(header, rows){
+function sheetXml(header, rows, styleFn){
   const all = [header, ...rows];
   const widths = header.map((_, c) => Math.min(70, Math.max(8, ...all.map(r => { const v = String(r[c] == null ? '' : r[c]); let w = 0; for (const ch of v.slice(0, 200)) w += ch.charCodeAt(0) > 255 ? 2 : 1; return w + 2; }))));
   const cell = (v, r, c, style) => {
@@ -680,7 +750,7 @@ function sheetXml(header, rows){
     if (typeof v === 'number' && isFinite(v)) return '<c r="' + ref + '"' + (style ? ' s="' + style + '"' : '') + '><v>' + v + '</v></c>';
     return '<c r="' + ref + '" t="inlineStr"' + (style ? ' s="' + style + '"' : '') + '><is><t xml:space="preserve">' + xmlEsc(String(v == null ? '' : v).slice(0, 32000)) + '</t></is></c>';
   };
-  const rowsXml = all.map((r, ri) => '<row r="' + (ri + 1) + '">' + r.map((v, ci) => cell(v, ri + 1, ci, ri === 0 ? 1 : 0)).join('') + '</row>').join('');
+  const rowsXml = all.map((r, ri) => '<row r="' + (ri + 1) + '">' + r.map((v, ci) => cell(v, ri + 1, ci, ri === 0 ? 1 : (styleFn ? styleFn(ri - 1, ci, v) : 0))).join('') + '</row>').join('');
   return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
     + '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'
     + '<cols>' + widths.map((w, i) => '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>').join('') + '</cols>'
@@ -694,8 +764,8 @@ function buildXlsx(sheets){
   files.push({ name: '_rels/.rels', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>' });
   files.push({ name: 'xl/workbook.xml', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>' + sheets.map((s, i) => '<sheet name="' + xmlEsc(s.name.replace(/[\\\/?*\[\]:]/g, '_').slice(0, 31)) + '" sheetId="' + (i + 1) + '" r:id="rId' + (i + 1) + '"/>').join('') + '</sheets>' + (sheets.some(s => s.rows.length) ? '<definedNames>' + sheets.map((s, i) => s.rows.length ? '<definedName name="_xlnm._FilterDatabase" localSheetId="' + i + '" hidden="1">\'' + xmlEsc(s.name.replace(/[\\\/?*\[\]:]/g, '_').slice(0, 31)).replace(/'/g, "''") + '\'!$A$1:$' + colName(s.header.length - 1) + '$' + (s.rows.length + 1) + '</definedName>' : '').join('') + '</definedNames>' : '') + '</workbook>' });
   files.push({ name: 'xl/_rels/workbook.xml.rels', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + sheets.map((_, i) => '<Relationship Id="rId' + (i + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' + (i + 1) + '.xml"/>').join('') + '<Relationship Id="rId' + (sheets.length + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>' });
-  files.push({ name: 'xl/styles.xml', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFD9E1F2"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>' });
-  sheets.forEach((s, i) => files.push({ name: 'xl/worksheets/sheet' + (i + 1) + '.xml', data: sheetXml(s.header, s.rows) }));
+  files.push({ name: 'xl/styles.xml', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFD9E1F2"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFFF00"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="7"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/><xf numFmtId="9" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="0" fontId="0" fillId="3" borderId="0" xfId="0" applyFill="1"/><xf numFmtId="9" fontId="0" fillId="3" borderId="0" xfId="0" applyNumberFormat="1" applyFill="1"/><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf><xf numFmtId="0" fontId="0" fillId="3" borderId="0" xfId="0" applyFill="1" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>' });
+  sheets.forEach((s, i) => files.push({ name: 'xl/worksheets/sheet' + (i + 1) + '.xml', data: sheetXml(s.header, s.rows, s.styleFn) }));
   return zipStore(files);
 }
 function downloadBlob(blob, filename){
@@ -870,7 +940,7 @@ class Component extends DCLogic {
 
   // ===== 備份 / 還原（已看紀錄 + 自訂歷史案例），換電腦或換瀏覽器時使用 =====
   exportBackup = () => {
-    const data = { app: 'juniper-log-analyzer', version: 1, exportedAt: new Date().toISOString(), seen: this.state.seen || {}, customHistory: this.state.customHist || [] };
+    const data = { app: 'juniper-log-analyzer', version: 1, exportedAt: new Date().toISOString(), seen: this.state.seen || {}, customHistory: this.state.customHist || [], daily: loadDaily() };
     downloadBlob(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), 'juniper_log_backup_' + todayStr() + '.json');
   };
   importBackup = (e) => {
@@ -893,6 +963,7 @@ class Component extends DCLogic {
       const newHist = (Array.isArray(data.customHistory) ? data.customHistory : []).filter(c => c && c.sig && c.id && !ids.has(c.id));
       const customHist = [...(this.state.customHist || []), ...newHist];
       saveSeen(seen); saveCustomHist(customHist);
+      if (data.daily && Array.isArray(data.daily.list) && data.daily.list.length) saveDaily({ list: data.daily.list, ignore: Array.isArray(data.daily.ignore) ? data.daily.ignore : [] });
       this.setState({ seen, customHist });
       window.alert('匯入完成：新增 ' + addedSeen + ' 筆已看紀錄、' + newHist.length + ' 筆歷史案例。');
     });
@@ -1007,6 +1078,7 @@ class Component extends DCLogic {
         if (buffer.some(l => /^Chassis\s+\S+/.test(l.trim()))) devices[host].hwOk = true;
         else devices[host].hwOk = devices[host].hwOk || false;
       } else if (mode === 'alarms') {
+        devices[host].alarmLines = [...new Set([...(devices[host].alarmLines || []), ...buffer.map(l => l.trim()).filter(l => /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(l))])];
         if (/No alarms currently active/.test(text)) devices[host].alarmCount = devices[host].alarmCount || 0;
         else { const cm = text.match(/(\d+)\s+alarms currently active/); if (cm) devices[host].alarmCount = Number(cm[1]); }
       }
@@ -1035,7 +1107,7 @@ class Component extends DCLogic {
         if (/show chassis routing-engine/.test(line)) { if (mode) finalizeDeviceBlock(mode, bufferHost, currentVersion, buffer); mode = 'chassis'; buffer = []; bufferHost = currentHost; continue; }
         if (/show chassis hardware/.test(line)) { if (mode) finalizeDeviceBlock(mode, bufferHost, currentVersion, buffer); mode = 'hw'; buffer = []; bufferHost = currentHost; continue; }
         if (/show chassis fpc\s*(\|.*)?$/.test(line)) { if (mode) finalizeDeviceBlock(mode, bufferHost, currentVersion, buffer); mode = 'fpc'; buffer = []; bufferHost = currentHost; continue; }
-        if (/show system alarms/.test(line)) { if (mode) finalizeDeviceBlock(mode, bufferHost, currentVersion, buffer); mode = 'alarms'; buffer = []; bufferHost = currentHost; continue; }
+        if (/show (system|chassis) alarms/.test(line)) { if (mode) finalizeDeviceBlock(mode, bufferHost, currentVersion, buffer); mode = 'alarms'; buffer = []; bufferHost = currentHost; continue; }
 
         if (mode) {
           if ((line.trim() === '' && buffer.length > 0) || (pm && buffer.length > 0)) {
@@ -1201,6 +1273,116 @@ class Component extends DCLogic {
       { name: '我的歷史案例', header: ['日期','Hostname','EventType','處理說明','訊息'], rows: histRows },
     ]);
     downloadBlob(blob, 'juniper_log_analysis_' + todayStr() + '.xlsx');
+  };
+
+  importDailyList = (e) => {
+    const input = e.target; const file = input.files && input.files[0];
+    if (!file) return;
+    const isXlsx = /\.xlsx$/i.test(file.name);
+    (isXlsx ? file.arrayBuffer().then(readXlsxRows) : file.text().then(t => ({ sheet: '', rows: t.split(/\r?\n/).map(l => l.split(/\t|,/)) })))
+      .then(({ sheet, rows }) => {
+        input.value = '';
+        const list = dailyListFromRows(rows);
+        if (!list.length) { window.alert('找不到設備清單。xlsx 請用 Daily check 檔（含「F1」區塊）；txt/csv 請每行一台：名稱,版本,型號。'); return; }
+        const cur = loadDaily();
+        const ans = window.prompt('已讀到 ' + list.length + ' 台' + (sheet ? '（工作表 ' + sheet + '）' : '') + '。\n要完全忽略的設備名稱（多台用逗號分隔，可留白）：', cur.ignore.join(', '));
+        const ignore = ans === null ? cur.ignore : ans.split(/[,，\s]+/).map(x => x.trim()).filter(Boolean);
+        const ig = new Set(ignore.map(dailyBase));
+        const cfg = { list: list.filter(r => !ig.has(dailyBase(r[0]))), ignore };
+        saveDaily(cfg);
+        window.alert('已儲存 Daily 清單：' + cfg.list.length + ' 台' + (ignore.length ? '，忽略 ' + ignore.length + ' 台' : '') + '。清單只存在這台電腦的瀏覽器。');
+      })
+      .catch(err => { input.value = ''; window.alert('匯入失敗：' + (err && err.message || err)); });
+  };
+
+  exportDailyCheck = () => {
+    const st = this.state;
+    if (!(st.rawFiles || []).length) { window.alert('請先上傳當天的 raw log。'); return; }
+    if (!loadDaily().list.length) { window.alert('還沒有設備清單：請先按「設定 Daily 清單」，匯入上一份 Daily check Excel（只會存在這台電腦的瀏覽器）。'); return; }
+    let inspector = '';
+    try { inspector = localStorage.getItem('jla_daily_inspector') || ''; } catch {}
+    const ans = window.prompt('檢查人員（可留白）', inspector);
+    if (ans === null) return;
+    inspector = ans.trim();
+    try { localStorage.setItem('jla_daily_inspector', inspector); } catch {}
+
+    const cfg = loadDaily();
+    const ignore = new Set(cfg.ignore.map(dailyBase));
+    const listed = new Map(cfg.list.map(r => [dailyBase(r[0]), r]));
+    // 同一台的 RE0 / RE1 / node 合併
+    const byBase = {};
+    Object.values(st.devices || {}).forEach(d => { const b = dailyBase(d.hostname); (byBase[b] = byBase[b] || []).push(d); });
+    const duByBase = {};
+    (st.downUpEvents || []).forEach(e => { if (!String(e.identifier).startsWith('if:')) return; const b = dailyBase(e.hostname); (duByBase[b] = duByBase[b] || []).push(e); });
+
+    const maxOf = arr => { const v = arr.filter(x => x !== null && x !== undefined && isFinite(x)); return v.length ? Math.round(Math.max(...v)) : null; };
+    const pctNum = s => { const n = parseInt(s, 10); return isFinite(n) ? n : null; };
+    const fmtAlarmTs = s => { const m = s.match(/^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})/); return m ? m[1] + ' ' + m[2] : ''; };
+
+    const rows = [], yellow = new Set(), notify = [], notes = [];
+    cfg.list.forEach(([name, ver0, model0]) => {
+      const b = dailyBase(name);
+      const ds = byBase[b] || [];
+      if (!ds.length) {
+        rows.push([name, ver0, model0, '無資料', '無資料', '無資料', inspector]);
+        notes.push(['缺資料', name, 'raw data 中沒有這台設備']);
+        return;
+      }
+      const mem = maxOf(ds.flatMap(d => [...(d.res || []).map(r => r.mem), pctNum(d.memUsage)]));
+      const cpu = maxOf(ds.flatMap(d => [...(d.res || []).map(r => r.cpu5s), pctNum(d.cpuUsage)]));
+      const ver = (ds.find(d => d.version) || {}).version || ver0;
+      const model = (ds.find(d => d.model) || {}).model || model0;
+      if (ver !== ver0) notes.push(['版本變動', name, ver0 + ' → ' + ver]);
+
+      const items = [];
+      if (mem !== null && mem > DAILY_THRESHOLD) items.push('RE Memory ' + mem + '%');
+      if (cpu !== null && cpu > DAILY_THRESHOLD) items.push('RE CPU ' + cpu + '%');
+      ds.forEach(d => (d.alarmLines || []).forEach(l => {
+        const txt = l.replace(/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(:\d{2})?\s*(\w{2,4})?\s+(Major|Minor|Critical)?\s*/i, '');
+        const it = 'Alarm: ' + txt + ' (' + fmtAlarmTs(l) + ')';
+        if (!items.includes(it)) items.push(it);
+      }));
+      // Link down / up：依實體介面彙整
+      const byIf = {};
+      (duByBase[b] || []).forEach(e => { const k = physIf(e.identifier); (byIf[k] = byIf[k] || []).push(e); });
+      let down = false;
+      Object.keys(byIf).sort().forEach(ifn => {
+        const evs = byIf[ifn].sort((x, y) => x.downFirst - y.downFirst);
+        const open = evs.filter(e => !e.recovered);
+        if (open.length) {
+          const t = open[open.length - 1].downLast;
+          items.push(ifn + ' down (' + fmtDT(t) + ')');
+          notify.push([name, ifn, fmtDT(t)]);
+          down = true;
+        } else {
+          const n = evs.reduce((s, e) => s + e.downCount, 0);
+          if (n >= 3) items.push(ifn + ' flapping (' + fmtDT(evs[0].downFirst) + '~' + fmtDT(evs[evs.length - 1].upAt).slice(-5) + ')');
+          else items.push(ifn + '\t瞬斷，已恢復');
+        }
+      });
+      if (down) yellow.add(rows.length);
+      rows.push([name, ver, model, mem === null ? '無資料' : mem / 100, cpu === null ? '無資料' : cpu / 100, items.length ? items.join('\n') : 'Normal', inspector]);
+      if (mem === null || cpu === null) notes.push(['缺 CPU/Memory', name, 'raw data 中沒有 show chassis routing-engine 輸出']);
+    });
+    Object.keys(byBase).forEach(b => {
+      if (listed.has(b) || ignore.has(b)) return;
+      notes.push(['清單外設備', byBase[b][0].hostname, '不在 85 台清單中，未列入表格']);
+    });
+
+    const styleFn = (ri, ci, v) => {
+      const y = yellow.has(ri);
+      if ((ci === 3 || ci === 4) && typeof v === 'number') return y ? 4 : 2;
+      if (ci === 5) return y ? 6 : 5;
+      return y ? 3 : 0;
+    };
+    const day = new Date();
+    const blob = buildXlsx([
+      { name: rocDate(day), header: ['', 'Version', 'Model', 'Memory Usage', 'CPU Usage', 'log Analysis', '檢查人員'], rows, styleFn },
+      { name: '需通知客戶', header: ['設備', '介面', 'Down 時間'], rows: notify.length ? notify : [['無', '', '']] },
+      { name: '異常備註', header: ['類型', '設備', '說明'], rows: notes.length ? notes : [['無', '', '']] },
+    ]);
+    const p = n => String(n).padStart(2, '0');
+    downloadBlob(blob, day.getFullYear() + p(day.getMonth() + 1) + p(day.getDate()) + '_Daily_check_F1.xlsx');
   };
 
   renderVals() {
@@ -1381,7 +1563,7 @@ class Component extends DCLogic {
       leftPanelStyle: 'width:' + st.leftWidth + 'px;flex-shrink:0;border-right:1px solid oklch(0.3 0.012 260);overflow-y:auto;padding:14px 10px;background:oklch(0.185 0.012 260);',
       rightPanelStyle: 'width:' + st.rightWidth + 'px;flex-shrink:0;border-left:1px solid oklch(0.3 0.012 260);overflow-y:auto;padding:18px;background:oklch(0.185 0.012 260);',
       handleFiles: this.handleFiles, onSearchChange: this.onSearchChange, resetAll: this.resetAll,
-      exportExcel: this.exportExcel,
+      exportExcel: this.exportExcel, exportDailyCheck: this.exportDailyCheck, importDailyList: this.importDailyList,
       selectDashboard: this.selectDashboard, selectDevices: this.selectDevices, selectAlertError: this.selectAlertError,
       dashboardNavStyle: 'padding:9px 10px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;margin-bottom:4px;background:' + (isDashboard ? 'oklch(0.28 0.02 235)' : 'transparent') + ';',
       devicesNavStyle: 'padding:9px 10px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;margin-bottom:4px;background:' + (isDevices ? 'oklch(0.28 0.02 235)' : 'transparent') + ';',

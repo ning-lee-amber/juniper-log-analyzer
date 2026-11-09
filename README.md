@@ -28,6 +28,7 @@ During daily device health checks and maintenance windows, reading through long 
 - **Viewed history** — hides logs you have already reviewed, so you focus on what's new
 - **Search** — filter by PID, interface, IP address, error code, or any keyword
 - **Export to Excel** — export results for reporting
+- **Daily Check export (F1)** — one click builds the daily check sheet with fixed rules, no AI needed (see below)
 - **No installation** — runs in the browser; UI in Traditional Chinese
 
 ## How to use
@@ -36,6 +37,22 @@ During daily device health checks and maintenance windows, reading through long 
 2. Click **上傳日誌檔案 (Upload log files)** and select one or more `.log` / `.txt` files
 3. Review results grouped by severity and module
 4. Use the search bar to drill down by PID / interface / IP / error code
+
+## Daily Check 匯出
+
+1. 第一次使用：按 **設定 Daily 清單**，匯入上一份 Daily check Excel（工具會讀最新一天工作表的「F1」區塊），也可以用 txt/csv（每行：名稱,版本,型號）。同時可以指定要完全忽略的設備。
+2. 每天：上傳當天 raw log，按 **Daily Check 匯出**，下載 `YYYYMMDD_Daily_check_F1.xlsx`。
+
+規則：
+
+- 依匯入清單的順序輸出；缺資料的設備照樣列出並填「無資料」
+- 欄位：設備 / Version / Model / Memory Usage / CPU Usage / log Analysis / 檢查人員（Memory 在 CPU 前）
+- Memory / CPU 為整數 %（同一台多顆 RE 取最大值），超過 80% 會寫進 log Analysis
+- 忽略清單中的設備完全不出現
+- 介面 down 後有 up → `瞬斷，已恢復` 或 `flapping`，不標黃；down 後沒 up → 整列標黃並列入「需通知客戶」工作表
+- 「異常備註」工作表列出缺資料、清單外設備、版本變動
+
+**設備清單不會寫進程式或上傳到任何地方**，只存在這台電腦的瀏覽器；換電腦時用「匯出備份 / 匯入備份」搬移。
 
 ## Data privacy
 
