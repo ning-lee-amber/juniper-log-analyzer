@@ -11,7 +11,13 @@
 
 設備清單直接讀範本工作表，程式裡不含任何設備名稱。
 
-用法：
+用法一（不用命令提示字元）：
+  直接點兩下 daily_check.py（或改名成 daily_check.pyw 就不會跳出黑色視窗），
+  依序選「總表」、「當天數據檔」，填檢查人員，就會在總表旁邊存出新檔。
+  也可以把總表和數據檔一起拖到 daily_check.py 圖示上。
+  第一次執行若沒有 openpyxl，程式會問你要不要自動安裝。
+
+用法二（命令列）：
   pip install openpyxl
   python daily_check.py Daily_check_F1.xlsx 今天的log.log [更多log...] --template 1151105 --inspector 你的名字 --replace-name 舊名字
   （log 也可以給資料夾，會讀裡面所有 .log / .txt；
@@ -32,11 +38,33 @@ import re
 import sys
 from copy import copy
 
-try:
-    import openpyxl
-    from openpyxl.styles import PatternFill
-except ImportError:
-    sys.exit('需要 openpyxl：請先執行  pip install openpyxl')
+def _ensure_openpyxl():
+    try:
+        import openpyxl  # noqa: F401
+        return
+    except ImportError:
+        pass
+    msg = '需要 openpyxl 套件才能讀寫 Excel，要現在自動安裝嗎？'
+    ok = False
+    try:
+        import tkinter
+        from tkinter import messagebox
+        root = tkinter.Tk(); root.withdraw()
+        ok = messagebox.askyesno('Daily Check', msg)
+        root.destroy()
+    except Exception:
+        ok = input(msg + ' (y/n) ').strip().lower().startswith('y') if sys.stdin and sys.stdin.isatty() else False
+    if not ok:
+        sys.exit('需要 openpyxl：請先執行  pip install openpyxl')
+    import subprocess
+    subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--user', 'openpyxl'])
+    import site, importlib
+    importlib.reload(site)
+
+
+_ensure_openpyxl()
+import openpyxl  # noqa: E402
+from openpyxl.styles import PatternFill  # noqa: E402
 
 THRESHOLD = 80
 YELLOW = 'FFFFFF00'
@@ -239,18 +267,16 @@ def roc(d):
     return '%d%02d%02d' % (d.year - 1911, d.month, d.day)
 
 
-def main():
-    ap = argparse.ArgumentParser(description='Daily Check：依 raw log 產生當天工作表')
-    ap.add_argument('workbook')
-    ap.add_argument('logs', nargs='+')
-    ap.add_argument('--template')
-    ap.add_argument('--date')
-    ap.add_argument('--inspector', required=True)
-    ap.add_argument('--replace-name')
-    ap.add_argument('--ignore', default='')
-    ap.add_argument('-o', '--output')
-    a = ap.parse_args()
+class SheetExists(RuntimeError):
+    pass
 
+
+def run(workbook, logs, template=None, date=None, inspector=None, replace_name=None, ignore='', output=None, overwrite=False):
+    """產生當天工作表，回傳 (輸出檔路徑, 報告文字)。發生問題時丟出 RuntimeError。"""
+    class A: pass
+    a = A()
+    a.workbook, a.logs, a.template, a.date = workbook, logs, template, date
+    a.inspector, a.replace_name, a.ignore, a.output = inspector, replace_name, ignore or '', output
     day = dt.date.fromisoformat(a.date) if a.date else dt.date.today()
     paths = []
     for p in a.logs:
@@ -259,16 +285,29 @@ def main():
         else:
             paths.append(p)
     if not paths:
-        sys.exit('找不到 log 檔')
+        raise RuntimeError('找不到 log 檔')
 
     wb = openpyxl.load_workbook(a.workbook)
-    days = [n for n in wb.sheetnames if re.fullmatch(r'\d{7}', n)]
-    tpl_name = a.template or (days[-1] if days else None)
-    if tpl_name not in wb.sheetnames:
-        sys.exit('找不到範本工作表 %s（可用的：%s）' % (tpl_name, ', '.join(days[-5:])))
     new_name = roc(day)
     if new_name in wb.sheetnames:
-        sys.exit('工作表 %s 已經存在，請先刪掉或用 --date 指定別天' % new_name)
+        if not overwrite:
+            raise SheetExists('工作表 %s 已經存在，請先刪掉或用 --date 指定別天' % new_name)
+        wb[new_name].title = '__old_' + new_name   # 同一天重跑：用舊的當天工作表當範本，做完再刪掉（原檔不受影響）
+    old_same_day = ('__old_' + new_name) if ('__old_' + new_name) in wb.sheetnames else None
+    days = [n for n in wb.sheetnames if re.fullmatch(r'\d{7}', n)]
+    tpl_name = a.template or old_same_day or (days[-1] if days else None)
+    if tpl_name not in wb.sheetnames:
+        raise RuntimeError('找不到範本工作表 %s（可用的：%s）' % (tpl_name, ', '.join(days[-5:])))
+    if a.replace_name == 'auto':             # 自動：把範本 F1 第一台設備的檢查人員換成新的檢查人員
+        a.replace_name = None
+        f1 = False
+        for r in range(1, wb[tpl_name].max_row + 1):
+            nm, q = wb[tpl_name].cell(r, COL_NAME).value, str(wb[tpl_name].cell(r, COL_VER).value or '')
+            if nm and q.upper().startswith('QTY'):
+                f1 = str(nm).strip().upper() == 'F1'
+            elif f1 and nm:
+                a.replace_name = wb[tpl_name].cell(r, COL_WHO).value
+                break
 
     tpl = wb[tpl_name]
     ws = wb.copy_worksheet(tpl)
@@ -341,28 +380,150 @@ def main():
         for ifn, t in downs:
             notify.append('%s  %s  down %s' % (name, ifn, fmt_dt(t)))
 
+    if not any(str(ws.cell(r, COL_NAME).value or '').strip().upper() == 'F1' for r in range(1, ws.max_row + 1)):
+        raise RuntimeError('範本工作表 %s 裡找不到「F1」區塊，選到的檔案可能不是總表。' % tpl_name)
+
     extra = [d.host for b, d in devices.items() if b not in rows_by_base and b not in ignore]
 
-    out = a.output or day.strftime('%Y%m%d') + '_Daily_check_F1.xlsx'
+    out = a.output or os.path.join(os.path.dirname(os.path.abspath(a.workbook)), day.strftime('%Y%m%d') + '_Daily_check_F1.xlsx')
+    if not a.output:
+        stem, k = out[:-5], 2
+        while os.path.exists(out) or os.path.abspath(out) == os.path.abspath(a.workbook):
+            out = '%s (%d).xlsx' % (stem, k); k += 1
     if os.path.abspath(out) == os.path.abspath(a.workbook):
-        sys.exit('輸出檔不能跟原檔同名，請用 -o 指定別的檔名')
+        raise RuntimeError('輸出檔不能跟原檔同名，請用 -o 指定別的檔名')
+    if old_same_day:
+        del wb[old_same_day]                 # 新的當天工作表已經放在前一天工作表後面
+        if tpl_name == old_same_day:
+            tpl_name = new_name + '（舊版）'
     wb.active = wb.sheetnames.index(new_name)
     wb.save(out)
 
-    print('已新增工作表 %s（範本 %s），存成 %s' % (new_name, tpl_name, out))
-    print('讀了 %d 個檔案，取得 %d 台設備的資料' % (len(paths), len(devices)))
-    print('\n需通知客戶（未恢復的 down，已標黃）：')
-    print('\n'.join('  ' + x for x in notify) or '  無')
+    rep = []
+    rep.append('已新增工作表 %s（範本 %s），存成 %s' % (new_name, tpl_name, out))
+    rep.append('讀了 %d 個檔案，取得 %d 台設備的資料' % (len(paths), len(devices)))
+    rep.append('\n需通知客戶（未恢復的 down，已標黃）：')
+    rep.append('\n'.join('  ' + x for x in notify) or '  無')
     if missing:
-        print('\nF1 缺資料（填「無資料」，共 %d 台）：' % len(missing))
-        print('  ' + ', '.join(missing))
+        rep.append('\nF1 缺資料（填「無資料」，共 %d 台）：' % len(missing))
+        rep.append('  ' + ', '.join(missing))
     if extra:
-        print('\n活頁簿中找不到的設備（未寫入）：')
-        print('  ' + ', '.join(extra))
+        rep.append('\n活頁簿中找不到的設備（未寫入）：')
+        rep.append('  ' + ', '.join(extra))
     if notes:
-        print('\n備註：')
-        print('\n'.join('  ' + x for x in notes))
-    print('\n其他區塊（WVPN / Allot / A10 / Tapping）中 log 裡沒有的設備，數值沿用範本 %s。' % tpl_name)
+        rep.append('\n備註：')
+        rep.append('\n'.join('  ' + x for x in notes))
+    rep.append('\n其他區塊（WVPN / Allot / A10 / Tapping）中 log 裡沒有的設備，數值沿用範本 %s。' % tpl_name)
+
+
+    return out, '\n'.join(rep)
+
+
+CONFIG = os.path.join(os.path.expanduser('~'), '.daily_check.json')
+
+
+def _load_cfg():
+    try:
+        import json
+        with open(CONFIG, encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_cfg(cfg):
+    try:
+        import json
+        with open(CONFIG, 'w', encoding='utf-8') as f:
+            json.dump(cfg, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+
+def _is_master(path):
+    """總表：有很多張民國日期（7 位數字）工作表。"""
+    try:
+        wb = openpyxl.load_workbook(path, read_only=True)
+        return sum(1 for n in wb.sheetnames if re.fullmatch(r'\d{7}', n)) >= 2
+    except Exception:
+        return False
+
+
+def gui_main(files):
+    try:
+        import tkinter
+        from tkinter import filedialog, messagebox, simpledialog
+    except ImportError:
+        sys.exit('這台電腦的 Python 沒有 tkinter，無法開視窗；請改用命令列：\n'
+                 '  python daily_check.py 總表.xlsx 數據檔 --inspector 名字')
+    root = tkinter.Tk(); root.withdraw()
+    try:
+        cfg = _load_cfg()
+        master, data = None, []
+        for f in files:
+            if f.lower().endswith('.xlsx') and master is None and _is_master(f):
+                master = f
+            else:
+                data.append(f)
+        if not master:
+            master = filedialog.askopenfilename(title='1/2 選「總表」（Daily check 活頁簿）',
+                                                initialdir=cfg.get('dir') or None,
+                                                filetypes=[('Excel', '*.xlsx')])
+            if not master:
+                return
+        if not _is_master(master):
+            messagebox.showerror('Daily Check', '這個檔案看起來不是總表（裡面沒有每天的工作表）：\n' + master)
+            return
+        if not data:
+            data = list(filedialog.askopenfilenames(title='2/2 選「當天數據」（網頁匯出的 xlsx 或 log，可多選）',
+                                                    initialdir=os.path.dirname(master),
+                                                    filetypes=[('數據檔', '*.xlsx *.log *.txt'), ('全部', '*.*')]))
+            if not data:
+                return
+        who = simpledialog.askstring('Daily Check', '檢查人員：', initialvalue=cfg.get('inspector', ''), parent=root)
+        if not who:
+            return
+        cfg.update(inspector=who.strip(), dir=os.path.dirname(master)); _save_cfg(cfg)
+        root.config(cursor='watch'); root.update()
+        try:
+            out, report = run(master, data, inspector=who.strip(), replace_name='auto')
+        except SheetExists:
+            root.config(cursor=''); root.update()
+            if not messagebox.askyesno('Daily Check', '總表裡已經有今天的工作表 %s。\n要用這次的數據重做一張嗎？（原檔不會被改）' % roc(dt.date.today())):
+                return
+            root.config(cursor='watch'); root.update()
+            out, report = run(master, data, inspector=who.strip(), replace_name='auto', overwrite=True)
+        messagebox.showinfo('Daily Check 完成', report + '\n\n檔案：' + out)
+        try:
+            os.startfile(os.path.dirname(out))   # Windows：打開輸出資料夾
+        except Exception:
+            pass
+    except Exception as e:
+        messagebox.showerror('Daily Check 失敗', str(e))
+    finally:
+        root.destroy()
+
+
+def main():
+    args = sys.argv[1:]
+    # 點兩下（沒有參數）或把檔案拖到圖示上（只有檔案、沒有 -- 參數）→ 視窗模式
+    if not args or all(not x.startswith('-') and os.path.exists(x) for x in args):
+        return gui_main(args)
+    ap = argparse.ArgumentParser(description='Daily Check：依 raw log 產生當天工作表')
+    ap.add_argument('workbook')
+    ap.add_argument('logs', nargs='+')
+    ap.add_argument('--template')
+    ap.add_argument('--date')
+    ap.add_argument('--inspector', required=True)
+    ap.add_argument('--replace-name')
+    ap.add_argument('--ignore', default='')
+    ap.add_argument('-o', '--output')
+    a = ap.parse_args(args)
+    try:
+        out, report = run(a.workbook, a.logs, a.template, a.date, a.inspector, a.replace_name, a.ignore, a.output)
+    except RuntimeError as e:
+        sys.exit(str(e))
+    print(report)
 
 
 if __name__ == '__main__':

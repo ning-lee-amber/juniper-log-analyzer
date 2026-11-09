@@ -54,6 +54,8 @@ During daily device health checks and maintenance windows, reading through long 
 
 ### Python 版：直接寫進總表
 
+**不用命令列：** 直接點兩下 `daily_check.py`（改名成 `daily_check.pyw` 就不會跳出黑色視窗），依序選總表、當天數據檔、填檢查人員即可；也可以把總表和數據檔一起拖到程式圖示上。新檔會存在總表旁邊。
+
 `daily_check.py` 會在 Daily check 總表裡複製範本工作表（格式完全沿用），新增當天的工作表，另存新檔（不覆蓋原檔）。資料可以給 raw log，也可以給網頁工具匯出的 xlsx。
 
 ```bash
