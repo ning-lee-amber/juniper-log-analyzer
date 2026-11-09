@@ -13,7 +13,7 @@
 
 用法一（不用命令提示字元）：
   直接點兩下 daily_check.py（或改名成 daily_check.pyw 就不會跳出黑色視窗），
-  依序選「總表」、「當天數據檔」，填檢查人員，就會在總表旁邊存出新檔。
+  在視窗裡把「總表」和「當天數據檔」一起選起來（按住 Ctrl），填檢查人員，就會在總表旁邊存出新檔。
   也可以把總表和數據檔一起拖到 daily_check.py 圖示上。
   第一次執行若沒有 openpyxl，程式會問你要不要自動安裝。
 
@@ -459,6 +459,13 @@ def gui_main(files):
     root = tkinter.Tk(); root.withdraw()
     try:
         cfg = _load_cfg()
+        if not files:
+            files = list(filedialog.askopenfilenames(
+                title='選「總表」和「當天數據」（按住 Ctrl 可一起選）',
+                initialdir=cfg.get('dir') or None,
+                filetypes=[('Excel / log', '*.xlsx *.log *.txt'), ('全部', '*.*')]))
+            if not files:
+                return
         master, data = None, []
         for f in files:
             if f.lower().endswith('.xlsx') and master is None and _is_master(f):
@@ -466,16 +473,18 @@ def gui_main(files):
             else:
                 data.append(f)
         if not master:
-            master = filedialog.askopenfilename(title='1/2 選「總表」（Daily check 活頁簿）',
-                                                initialdir=cfg.get('dir') or None,
+            messagebox.showinfo('Daily Check', '你選的檔案裡沒有總表（有每天工作表的那份大檔案）。\n下一步請選「總表」。')
+            master = filedialog.askopenfilename(title='選「總表」（有每天工作表的 Daily check 檔）',
+                                                initialdir=os.path.dirname(files[0]),
                                                 filetypes=[('Excel', '*.xlsx')])
             if not master:
                 return
-        if not _is_master(master):
-            messagebox.showerror('Daily Check', '這個檔案看起來不是總表（裡面沒有每天的工作表）：\n' + master)
-            return
+            if not _is_master(master):
+                messagebox.showerror('Daily Check', '這個檔案不是總表（裡面沒有每天的工作表）：\n' + master
+                                     + '\n\n總表是有很多張「1151105、1151106…」工作表的那份大檔案。')
+                return
         if not data:
-            data = list(filedialog.askopenfilenames(title='2/2 選「當天數據」（網頁匯出的 xlsx 或 log，可多選）',
+            data = list(filedialog.askopenfilenames(title='選「當天數據」（網頁匯出的 xlsx 或 log，可多選）',
                                                     initialdir=os.path.dirname(master),
                                                     filetypes=[('數據檔', '*.xlsx *.log *.txt'), ('全部', '*.*')]))
             if not data:
