@@ -52,6 +52,15 @@ During daily device health checks and maintenance windows, reading through long 
 - 介面 down 後有 up → `瞬斷，已恢復` 或 `flapping`，不標黃；down 後沒 up → 整列標黃並列入「需通知客戶」工作表
 - 「異常備註」工作表列出缺資料、清單外設備、版本變動
 
+### Python 版：直接寫進總表
+
+`daily_check.py` 會在 Daily check 總表裡複製範本工作表（格式完全沿用），新增當天的工作表，另存新檔（不覆蓋原檔）。資料可以給 raw log，也可以給網頁工具匯出的 xlsx。
+
+```bash
+pip install openpyxl
+python daily_check.py 總表.xlsx 今天的log或匯出檔 --template 前一天工作表 --inspector 你的名字 --replace-name 舊名字
+```
+
 **設備清單不會寫進程式或上傳到任何地方**，只存在這台電腦的瀏覽器；換電腦時用「匯出備份 / 匯入備份」搬移。
 
 ## Data privacy

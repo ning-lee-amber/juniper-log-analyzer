@@ -1331,7 +1331,7 @@ class Component extends DCLogic {
       const mem = maxOf(ds.flatMap(d => [...(d.res || []).map(r => r.mem), pctNum(d.memUsage)]));
       const cpu = maxOf(ds.flatMap(d => [...(d.res || []).map(r => r.cpu5s), pctNum(d.cpuUsage)]));
       const ver = (ds.find(d => d.version) || {}).version || ver0;
-      const model = (ds.find(d => d.model) || {}).model || model0;
+      const model = model0;   // 型號一律沿用清單（routing-engine 輸出的 Model 是 RE 板卡，不是機型）
       if (ver !== ver0) notes.push(['版本變動', name, ver0 + ' → ' + ver]);
 
       const items = [];
@@ -1339,7 +1339,9 @@ class Component extends DCLogic {
       if (cpu !== null && cpu > DAILY_THRESHOLD) items.push('RE CPU ' + cpu + '%');
       ds.forEach(d => (d.alarmLines || []).forEach(l => {
         const txt = l.replace(/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(:\d{2})?\s*(\w{2,4})?\s+(Major|Minor|Critical)?\s*/i, '');
-        const it = 'Alarm: ' + txt + ' (' + fmtAlarmTs(l) + ')';
+        const ts = fmtAlarmTs(l);
+        if (ts.slice(0, 4) !== String(new Date().getFullYear())) return;   // 舊年度的 alarm 屬於長期存在，不列（SOP：看有沒有今年的）
+        const it = 'Alarm: ' + txt + ' (' + ts + ')';
         if (!items.includes(it)) items.push(it);
       }));
       // Link down / up：依實體介面彙整
@@ -1349,14 +1351,18 @@ class Component extends DCLogic {
       Object.keys(byIf).sort().forEach(ifn => {
         const evs = byIf[ifn].sort((x, y) => x.downFirst - y.downFirst);
         const open = evs.filter(e => !e.recovered);
-        if (open.length) {
+        if (open.length && /ifAdminStatus\s+down/i.test(open[open.length - 1].downSample || '')) {
+          items.push(ifn + ' admin down (' + fmtDT(open[open.length - 1].downLast) + ')');   // 手動關閉，不標黃
+        } else if (open.length) {
           const t = open[open.length - 1].downLast;
           items.push(ifn + ' down (' + fmtDT(t) + ')');
           notify.push([name, ifn, fmtDT(t)]);
           down = true;
         } else {
           const n = evs.reduce((s, e) => s + e.downCount, 0);
-          if (n >= 3) items.push(ifn + ' flapping (' + fmtDT(evs[0].downFirst) + '~' + fmtDT(evs[evs.length - 1].upAt).slice(-5) + ')');
+          const endAt = evs[evs.length - 1].upAt, startAt = evs[0].downFirst;
+          const end = endAt && startAt && endAt.toDateString() === startAt.toDateString() ? fmtDT(endAt).slice(-5) : fmtDT(endAt);
+          if (n >= 3) items.push(ifn + ' flapping (' + fmtDT(startAt) + '~' + end + ')');
           else items.push(ifn + '\t瞬斷，已恢復');
         }
       });
