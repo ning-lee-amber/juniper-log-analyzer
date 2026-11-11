@@ -52,6 +52,7 @@
 
       <div style="{{leftPanelStyle}}">
         <div onClick="{{selectUrgent}}" style="{{urgentNavStyle}}">📝 今日判讀（要寫 {{urgentCount}}）</div>
+        <div onClick="{{selectFill}}" style="{{fillNavStyle}}"><span>🧾 填表模式</span><span style="font-size:11.5px;color:oklch(0.65 0.01 260);">{{fillCount}} 台</span></div>
         <div onClick="{{selectFlap}}" style="{{flapNavStyle}}"><span>🔁 介面狂跳</span><span style="{{flapBadgeStyle}}">{{flapCount}}</span></div>
         <div onClick="{{selectDashboard}}" style="{{dashboardNavStyle}}">📊 總覽 Dashboard</div>
         <div onClick="{{selectAlertError}}" style="{{alertErrorNavStyle}}">🚨 Alert/Error ({{alertErrorCount}})</div>
@@ -77,10 +78,14 @@
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:-6px 0 16px;font-size:12px;color:oklch(0.7 0.01 260);">
           <span style="white-space:nowrap;">🕒 只看這個時間之後：</span>
           <input type="datetime-local" value="{{sinceInput}}" onChange="{{onSinceChange}}" style="background:oklch(0.24 0.012 260);border:1px solid {{sinceBorder}};color:oklch(0.9 0.006 260);padding:4px 7px;border-radius:5px;font-size:12px;color-scheme:dark;" />
+          <div onClick="{{sinceFromLog}}" title="設成上一次收 log 的時間（從 log 裡 show chassis routing-engine 的 Start time + Uptime 算出）" style="font-size:11.5px;padding:4px 10px;border-radius:12px;cursor:pointer;border:1px solid oklch(0.68 0.14 235 / 0.6);background:oklch(0.68 0.14 235 / 0.18);color:oklch(0.85 0.08 235);white-space:nowrap;">取 log 時間</div>
           <div onClick="{{sinceLastExport}}" title="上次按「Daily Check 匯出」的時間" style="font-size:11.5px;padding:4px 10px;border-radius:12px;cursor:pointer;border:1px solid oklch(0.34 0.012 260);background:oklch(0.25 0.012 260);color:oklch(0.85 0.006 260);white-space:nowrap;">上次匯出時間</div>
           <div onClick="{{clearSince}}" style="font-size:11.5px;padding:4px 10px;border-radius:12px;cursor:pointer;border:1px solid oklch(0.34 0.012 260);background:oklch(0.25 0.012 260);color:oklch(0.85 0.006 260);white-space:nowrap;">全部時間</div>
+          <sc-if value="{{hasCollect}}" hint-placeholder-val="{{false}}">
+            <span style="color:oklch(0.62 0.01 260);">這次收 log：{{collectLabel}}</span>
+          </sc-if>
           <sc-if value="{{hasSince}}" hint-placeholder-val="{{false}}">
-            <span style="color:oklch(0.82 0.13 95);">已套用：{{sinceLabel}} 之前的事件不顯示（上方的總數仍是整份 log）</span>
+            <span style="color:oklch(0.82 0.13 95);">{{sinceSourceLabel}}已套用：{{sinceLabel}} 之前的事件不顯示（上方的總數仍是整份 log）</span>
           </sc-if>
         </div>
 
@@ -108,7 +113,7 @@
                   <sc-for list="{{flapTop}}" as="f" hint-placeholder-count="5">
                     <tr onClick="{{f.select}}" title="點一下查看這個介面的相關 log" style="border-top:1px solid oklch(0.27 0.012 260);cursor:pointer;">
                       <td style="padding:7px 10px;font-weight:600;">{{f.hostname}}</td>
-                      <td style="padding:7px 10px;font-family:ui-monospace,Menlo,Consolas,monospace;color:oklch(0.9 0.006 260);"><div style="white-space:nowrap;">{{f.label}}</div><sc-if value="{{f.note}}" hint-placeholder-val="{{false}}"><div style="font-family:inherit;font-size:11px;color:oklch(0.78 0.15 95);margin-top:2px;">🔗 {{f.note}}</div></sc-if></td>
+                      <td style="padding:7px 10px;font-family:ui-monospace,Menlo,Consolas,monospace;color:oklch(0.9 0.006 260);"><div style="white-space:nowrap;">{{f.label}}</div><sc-if value="{{f.note}}" hint-placeholder-val="{{false}}"><div style="font-family:inherit;font-size:11px;color:oklch(0.78 0.15 95);margin-top:2px;">{{f.note}}</div></sc-if></td>
                       <td style="padding:7px 10px;color:oklch(0.65 0.01 260);white-space:nowrap;">{{f.kind}}</td>
                       <td style="padding:7px 10px;text-align:right;font-weight:700;color:oklch(0.78 0.15 95);font-variant-numeric:tabular-nums;">{{f.downs}}</td>
                       <td style="padding:7px 10px;white-space:nowrap;color:oklch(0.75 0.01 260);font-variant-numeric:tabular-nums;">{{f.range}}</td>
@@ -215,6 +220,40 @@
           </div>
         </sc-if>
 
+        <sc-if value="{{isFill}}" hint-placeholder-val="{{false}}">
+          <div style="font-size:14px;font-weight:700;margin:0 0 4px;">🧾 填表模式</div>
+          <div style="font-size:11.5px;color:oklch(0.58 0.01 260);margin:0 0 10px;line-height:1.6;">log 裡有出現的設備，依 Daily 清單順序一台一列。灰框裡就是要貼進 Excel「log Analysis」欄的文字（跟「Daily Check 匯出」的內容完全一樣），按「複製」再到 Excel 貼上。黃色提示只是給你判斷用，不會寫進 Excel。</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px;font-size:12px;">
+            <span style="font-size:10.5px;padding:1px 8px;border-radius:10px;white-space:nowrap;background:oklch(0.3 0.012 260);color:oklch(0.85 0.006 260);">log 裡有 {{fillCount}} 台</span>
+            <span style="font-size:10.5px;padding:1px 8px;border-radius:10px;white-space:nowrap;background:oklch(0.3 0.012 260);color:oklch(0.85 0.006 260);">非 Normal {{fillAbnormalCount}} 台</span>
+            <sc-if value="{{hasFillMissing}}" hint-placeholder-val="{{false}}">
+              <span style="font-size:10.5px;padding:1px 8px;border-radius:10px;white-space:nowrap;background:oklch(0.78 0.15 95 / 0.25);color:oklch(0.9 0.12 95);">⚠ {{fillMissingCount}} 台總表找不到（黃底）</span>
+            </sc-if>
+          </div>
+          <sc-if value="{{fillNoList}}" hint-placeholder-val="{{false}}">
+            <div style="padding:10px 12px;margin:0 0 12px;border-radius:6px;background:oklch(0.78 0.15 95 / 0.12);border:1px solid oklch(0.78 0.15 95 / 0.4);font-size:12.5px;color:oklch(0.88 0.1 95);">還沒有 Daily 設備清單，所以每台都會顯示「總表找不到」。請先按上方「設定 Daily 清單」匯入 Daily check Excel。</div>
+          </sc-if>
+          <sc-for list="{{fillRows}}" as="r" hint-placeholder-count="5">
+            <div style="{{r.rowStyle}}">
+              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                <span style="font-size:13px;font-weight:700;">{{r.name}}</span>
+                <span style="font-size:11.5px;color:oklch(0.62 0.01 260);">Memory {{r.mem}}　CPU {{r.cpu}}</span>
+                <sc-if value="{{r.notInList}}" hint-placeholder-val="{{false}}">
+                  <span style="font-size:10.5px;padding:1px 8px;border-radius:10px;white-space:nowrap;background:oklch(0.78 0.15 95 / 0.3);color:oklch(0.92 0.12 95);">⚠ 總表找不到這台</span>
+                </sc-if>
+                <sc-if value="{{r.down}}" hint-placeholder-val="{{false}}">
+                  <span style="font-size:10.5px;padding:1px 8px;border-radius:10px;white-space:nowrap;background:oklch(0.62 0.21 25 / 0.25);color:oklch(0.85 0.14 25);">✖ 有未恢復的 down，Excel 會整列標黃並列入需通知客戶</span>
+                </sc-if>
+                <div onClick="{{r.copy}}" style="margin-left:auto;font-size:11.5px;padding:3px 12px;border-radius:5px;cursor:pointer;border:1px solid oklch(0.68 0.14 235 / 0.6);background:{{r.copyBg}};color:oklch(0.88 0.06 235);white-space:nowrap;">{{r.copyLabel}}</div>
+              </div>
+              <pre style="white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.55;margin:8px 0 0;padding:8px 10px;border-radius:5px;background:oklch(0.17 0.012 260);border:1px solid oklch(0.3 0.012 260);color:{{r.textColor}};">{{r.text}}</pre>
+              <sc-for list="{{r.hints}}" as="h" hint-placeholder-count="1">
+                <div style="font-size:11.5px;color:oklch(0.85 0.13 95);margin-top:4px;">{{h.text}}</div>
+              </sc-for>
+            </div>
+          </sc-for>
+        </sc-if>
+
         <sc-if value="{{isTriage}}" hint-placeholder-val="{{false}}">
           <div style="font-size:14px;font-weight:700;margin:0 0 4px;">📝 今日判讀</div>
           <div style="font-size:11.5px;color:oklch(0.58 0.01 260);margin:0 0 4px;line-height:1.6;">依 Daily 判讀規則分成三區。每天只要看「要寫 Daily」；「要看一下」和「已知雜訊」預設收起。不同設備出現同一種訊息會合併成一列，點一列可在右側看原始 log。</div>
@@ -231,7 +270,7 @@
                 <div style="font-size:12px;color:oklch(0.85 0.006 260);font-family:ui-monospace,Menlo,Consolas,monospace;">{{ev.title}}</div>
                 <div style="font-size:11px;color:oklch(0.6 0.01 260);margin-top:2px;">{{ev.sub}}</div>
                 <sc-if value="{{ev.note}}" hint-placeholder-val="{{false}}">
-                  <div style="font-size:11px;color:oklch(0.78 0.15 95);margin-top:2px;">🔗 {{ev.note}}</div>
+                  <div style="font-size:11px;color:oklch(0.78 0.15 95);margin-top:2px;">{{ev.note}}</div>
                 </sc-if>
               </div>
             </div>
@@ -318,7 +357,7 @@
                   <sc-for list="{{flapRows}}" as="f" hint-placeholder-count="5">
                     <tr onClick="{{f.select}}" title="點一下查看這個介面的相關 log" style="border-top:1px solid oklch(0.27 0.012 260);cursor:pointer;">
                       <td style="padding:7px 10px;font-weight:600;">{{f.hostname}}</td>
-                      <td style="padding:7px 10px;font-family:ui-monospace,Menlo,Consolas,monospace;color:oklch(0.9 0.006 260);"><div style="white-space:nowrap;">{{f.label}}</div><sc-if value="{{f.note}}" hint-placeholder-val="{{false}}"><div style="font-family:inherit;font-size:11px;color:oklch(0.78 0.15 95);margin-top:2px;">🔗 {{f.note}}</div></sc-if></td>
+                      <td style="padding:7px 10px;font-family:ui-monospace,Menlo,Consolas,monospace;color:oklch(0.9 0.006 260);"><div style="white-space:nowrap;">{{f.label}}</div><sc-if value="{{f.note}}" hint-placeholder-val="{{false}}"><div style="font-family:inherit;font-size:11px;color:oklch(0.78 0.15 95);margin-top:2px;">{{f.note}}</div></sc-if></td>
                       <td style="padding:7px 10px;color:oklch(0.65 0.01 260);white-space:nowrap;">{{f.kind}}</td>
                       <td style="padding:7px 10px;text-align:right;font-weight:700;color:oklch(0.78 0.15 95);font-variant-numeric:tabular-nums;">{{f.downs}}</td>
                       <td style="padding:7px 10px;white-space:nowrap;color:oklch(0.75 0.01 260);font-variant-numeric:tabular-nums;">{{f.range}}</td>
@@ -743,6 +782,19 @@ const SINCE_KEY = 'jla_since_v1', LAST_EXPORT_KEY = 'jla_last_export_v1';
 function loadSince(){ try { const v = Number(localStorage.getItem(SINCE_KEY)); return v > 0 ? v : null; } catch { return null; } }
 function saveSince(v){ try { if (v) localStorage.setItem(SINCE_KEY, String(v)); else localStorage.removeItem(SINCE_KEY); } catch {} }
 function toLocalInput(ms){ if (!ms) return ''; const d = new Date(ms); const p = n => String(n).padStart(2, '0'); return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes()); }
+const COLLECT_HIST_KEY = 'jla_collect_hist_v1';
+function collectRange(devices){
+  const ts = Object.values(devices || {}).map(d => d.collectedAt).filter(Boolean);
+  return ts.length ? { start: Math.min(...ts), end: Math.max(...ts) } : { start: null, end: null };
+}
+function loadCollectHist(){ try { const v = JSON.parse(localStorage.getItem(COLLECT_HIST_KEY) || '[]'); return Array.isArray(v) ? v.filter(x => x > 0) : []; } catch { return []; } }
+function rememberCollect(t){
+  if (!t) return;
+  const h = loadCollectHist();
+  if (h.some(x => Math.abs(x - t) < 2 * 3600000)) return;   // 同一次收 log（2 小時內）只記一次
+  h.push(t); h.sort((a, b) => a - b);
+  try { localStorage.setItem(COLLECT_HIST_KEY, JSON.stringify(h.slice(-60))); } catch {}
+}
 function loadSeen(){
   try { const v = JSON.parse(localStorage.getItem(SEEN_STORE_KEY) || '{}'); return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; }
   catch { return {}; }
@@ -1009,9 +1061,49 @@ function mergeFlaps(flaps){
     out.push({ ...f, hosts, hostname: hosts.join('、'), downs: Math.max(...same.map(x => x.downs)),
       first: new Date(Math.min(...same.map(x => +x.first))), last: new Date(Math.max(...same.map(x => +x.last))),
       stillDown: same.some(x => x.stillDown), unknown: same.every(x => x.unknown),
-      note: hosts.length > 1 ? (hosts.length + ' 台設備同時斷同一個對端 → 問題偏向對端或中間線路') : '' });
+      note: hosts.length > 1 ? ('🔗 ' + hosts.length + ' 台設備同時斷同一個對端 → 問題偏向對端或中間線路') : '' });
   });
   return out;
+}
+
+// ===== 疑似維護：同一台設備 1 小時內有 5 個以上介面接連斷線 =====
+const MAINT_MIN_IF = 5, MAINT_WINDOW = 3600000;
+function detectMaint(downUpEvents){
+  const byHost = {};
+  (downUpEvents || []).forEach(e => {
+    if (!String(e.identifier).startsWith('if:') || /bfd/i.test(e.downSample || '')) return;
+    (byHost[e.hostname] = byHost[e.hostname] || []).push({ t: +e.downFirst, end: +(e.upAt || e.downLast), ifn: physIf(e.identifier) });
+  });
+  const out = {};
+  Object.entries(byHost).forEach(([h, arr]) => {
+    arr.sort((a, b) => a.t - b.t);
+    const wins = [];
+    let j = 0;
+    for (let i = 0; i < arr.length; i++) {
+      while (arr[i].t - arr[j].t > MAINT_WINDOW) j++;
+      const part = arr.slice(j, i + 1), set = new Set(part.map(x => x.ifn));
+      if (set.size < MAINT_MIN_IF) continue;
+      const s0 = arr[j].t, e0 = Math.max(...part.map(x => x.end)), last = wins[wins.length - 1];
+      if (last && s0 <= last.end) { last.end = Math.max(last.end, e0); part.forEach(x => last.ifs.add(x.ifn)); }
+      else wins.push({ start: s0, end: e0, ifs: set });
+    }
+    if (wins.length) out[h] = wins.map(w => ({ start: new Date(w.start), end: new Date(w.end), ifCount: w.ifs.size }));
+  });
+  return out;
+}
+function maintNote(m){ return '🛠 疑似維護：' + fmtDT(m.start) + ' ~ ' + fmtDT(m.end) + '，' + m.ifCount + ' 個介面在 1 小時內接連斷線（請確認是否有 CR 或對端維護）'; }
+// 要寫 Daily 的硬體事件 → log Analysis 寫法
+function hwText(g){
+  const t = fmtDT(g.first);
+  const fru = g.sample.match(/jnxFruName ([^,]+?), jnxFruType/);
+  if (fru) {
+    const name = fru[1].trim(), m = name.match(/^FPC:\s*(.*?)\s*@\s*(\d+)/);
+    const st = /Online/i.test(g.sample) ? 'online' : /Offline/i.test(g.sample) ? 'offline' : /power on/i.test(g.sample) ? 'power on' : 'power off';
+    return { text: (m ? 'FPC ' + m[2] + (m[1] ? ' ' + m[1] : '') : name) + ' ' + st + ' (' + t + ')', fru: true, key: name };
+  }
+  const fpc = (g.sample.match(/\bfpc\s*(\d+)/i) || [])[1];
+  if (/LUCHIP|IDMEM|parity/i.test(g.sample)) return { text: (fpc ? 'FPC ' + fpc + ' ' : '') + (/IDMEM/i.test(g.sample) && /parity/i.test(g.sample) ? 'LUCHIP IDMEM Parity error' : /parity/i.test(g.sample) ? 'Parity error' : 'LUCHIP error') + ' (' + t + ')' };
+  return { text: g.sample.replace(/\s+/g, ' ').slice(0, 80) + ' (' + t + ')' };
 }
 
 function physIf(id){ return String(id).replace(/^if:/, '').replace(/\.\d+$/, ''); }
@@ -1328,6 +1420,7 @@ class Component extends DCLogic {
     // 只保留檔名與大小，不把整份檔案內容留在記憶體
     const rawFiles = [...(st.rawFiles || []), ...results.map(r => ({ name: r.name, size: r.text.length }))];
     this.setState({ rawFiles, ...parsed, loading: false, progress: 0, view: { kind: 'dashboard' }, selectedKey: null, listLimit: LIST_PAGE });
+    rememberCollect(collectRange(parsed.devices).start);   // 記下這次收 log 的時間，下次「取 log 時間」用
   };
 
   resetAll = () => {
@@ -1353,12 +1446,22 @@ class Component extends DCLogic {
       if (mode === 'chassis') {
         const model = text.match(/Model\s+(\S+)/); if (model) devices[host].model = model[1];
         const mem = text.match(/Memory utilization\s+(\d+)\s*percent/); if (mem) devices[host].memUsage = mem[1] + '%';
+        // 收 log 的時間 = RE 的 Start time + Uptime
+        const stt = text.match(/Start time\s+(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/);
+        const upt = text.match(/Uptime\s+((?:\d+\s+\w+,?\s*)+)/);
+        if (stt && upt) {
+          const u = upt[1]; const num = (re) => { const x = u.match(re); return x ? Number(x[1]) : 0; };
+          const secs = num(/(\d+)\s+days?/) * 86400 + num(/(\d+)\s+hours?/) * 3600 + num(/(\d+)\s+minutes?/) * 60 + num(/(\d+)\s+seconds?/);
+          const t0 = new Date(+stt[1], +stt[2] - 1, +stt[3], +stt[4], +stt[5], +stt[6]).getTime();
+          if (secs > 0) devices[host].collectedAt = t0 + secs * 1000;
+        }
         const idle = text.match(/CPU utilization:[\s\S]*?Idle\s+(\d+)\s*percent/); if (idle) devices[host].cpuUsage = (100 - Number(idle[1])) + '%';
         const parts = text.split(/^\s*Slot\s+(\d+):/m); const res = [];
         for (let i = 1; i < parts.length; i += 2) {
           const b = parts[i + 1] || ''; const cpu = (lbl) => { const x = b.match(new RegExp(lbl + ' CPU utilization:[\\s\\S]*?Idle\\s+(\\d+)\\s*percent')); return x ? 100 - Number(x[1]) : null; };
           const st = b.match(/Current state\s+(\S+)/); const mm = b.match(/Memory utilization\s+(\d+)\s*percent/);
-          res.push({ slot: parts[i], state: st ? st[1] : '', mem: mm ? Number(mm[1]) : null, cpu5s: cpu('5 sec'), cpu1m: cpu('1 min'), cpu5m: cpu('5 min'), cpu15m: cpu('15 min') });
+          const anyIdle = b.match(/CPU utilization:[\s\S]*?Idle\s+(\d+)\s*percent/);
+          res.push({ slot: parts[i], state: st ? st[1] : '', mem: mm ? Number(mm[1]) : null, cpuNow: anyIdle ? 100 - Number(anyIdle[1]) : null, cpu5s: cpu('5 sec'), cpu1m: cpu('1 min'), cpu5m: cpu('5 min'), cpu15m: cpu('15 min') });
         }
         if (res.length) devices[host].res = res;
       } else if (mode === 'fpc') {
@@ -1516,14 +1619,29 @@ class Component extends DCLogic {
   selectDevices = () => { this.setState({ view: { kind: 'devices' }, selectedKey: null, searchQuery: '', listLimit: LIST_PAGE }); };
   selectAlertError = () => { this.setState({ view: { kind: 'severity', severities: [0, 1, 2, 3] }, selectedKey: null, searchQuery: '', listLimit: LIST_PAGE }); };
   selectCpuMem = () => { this.setState({ view: { kind: 'cpumem' }, selectedKey: null, searchQuery: '', listLimit: LIST_PAGE }); };
+  selectFill = () => { this.setState({ view: { kind: 'fill' }, selectedKey: null, searchQuery: '', listLimit: LIST_PAGE }); };
+  copyText = (key, text) => {
+    const done = () => this.setState({ copiedKey: key });
+    try {
+      navigator.clipboard.writeText(text).then(done).catch(() => window.prompt('複製下面的文字（Ctrl+C）', text));
+    } catch { window.prompt('複製下面的文字（Ctrl+C）', text); }
+  };
   selectFlap = () => { this.setState({ view: { kind: 'flap' }, selectedKey: null, searchQuery: '', listLimit: LIST_PAGE }); };
-  onSinceChange = (e) => { const v = e.target.value ? new Date(e.target.value).getTime() : null; saveSince(v); this.setState({ since: v, listLimit: LIST_PAGE }); };
+  onSinceChange = (e) => { const v = e.target.value ? new Date(e.target.value).getTime() : null; saveSince(v); this.setState({ since: v, sinceSource: null, listLimit: LIST_PAGE }); };
   sinceLastExport = () => {
     let v = null; try { v = Number(localStorage.getItem(LAST_EXPORT_KEY)) || null; } catch {}
     if (!v) { window.alert('還沒有匯出紀錄：按過一次「Daily Check 匯出」之後，這裡就會記住匯出時間。'); return; }
-    saveSince(v); this.setState({ since: v, listLimit: LIST_PAGE });
+    saveSince(v); this.setState({ since: v, sinceSource: null, listLimit: LIST_PAGE });
   };
-  clearSince = () => { saveSince(null); this.setState({ since: null, listLimit: LIST_PAGE }); };
+  // 「取 log 時間」：設成上一次收 log 的時間（有紀錄就用紀錄，沒有就用這次收 log 往前 24 小時）
+  sinceFromLog = () => {
+    const cur = collectRange(this.state.devices).start;
+    if (!cur) { window.alert('log 裡找不到收 log 的時間（需要 show chassis routing-engine 的 Start time 和 Uptime）。'); return; }
+    const prevs = loadCollectHist().filter(x => x < cur - 2 * 3600000);
+    const v = prevs.length ? prevs[prevs.length - 1] : cur - 24 * 3600000;
+    saveSince(v); this.setState({ since: v, sinceSource: prevs.length ? 'hist' : 'guess', listLimit: LIST_PAGE });
+  };
+  clearSince = () => { saveSince(null); this.setState({ since: null, sinceSource: null, listLimit: LIST_PAGE }); };
   toggleLook = () => { this.setState(s => ({ showLook: !s.showLook })); };
   toggleNoise = () => { this.setState(s => ({ showNoise: !s.showNoise })); };
   toggleLowPriority = () => { this.setState(s => ({ showLowPriority: !s.showLowPriority })); };
@@ -1611,17 +1729,8 @@ class Component extends DCLogic {
       .catch(err => { input.value = ''; window.alert('匯入失敗：' + (err && err.message || err)); });
   };
 
-  exportDailyCheck = () => {
-    const st = this.state;
-    if (!(st.rawFiles || []).length) { window.alert('請先上傳當天的 raw log。'); return; }
-    if (!loadDaily().list.length) { window.alert('還沒有設備清單：請先按「設定 Daily 清單」，匯入上一份 Daily check Excel（只會存在這台電腦的瀏覽器）。'); return; }
-    let inspector = '';
-    try { inspector = localStorage.getItem('jla_daily_inspector') || ''; } catch {}
-    const ans = window.prompt('檢查人員（可留白）', inspector);
-    if (ans === null) return;
-    inspector = ans.trim();
-    try { localStorage.setItem('jla_daily_inspector', inspector); } catch {}
-
+  // Daily 的 log Analysis 計算：「Daily Check 匯出」和「填表模式」共用，兩邊結果一定一樣
+  computeDaily = (st) => {
     const cfg = loadDaily();
     const ignore = new Set(cfg.ignore.map(dailyBase));
     const listed = new Map(cfg.list.map(r => [dailyBase(r[0]), r]));
@@ -1633,27 +1742,31 @@ class Component extends DCLogic {
     (st.downUpEvents || []).forEach(e => { if (!String(e.identifier).startsWith('if:') || /bfd/i.test(e.downSample || '')) return; const b = dailyBase(e.hostname); (duByBase[b] = duByBase[b] || []).push(e); });
     const bfdByBase = {};
     computeFlaps(st.duTracker).filter(f => f.kind === 'BFD 對端').forEach(f => { const b = dailyBase(f.hostname); (bfdByBase[b] = bfdByBase[b] || []).push(f); });
+    // 要寫 Daily 的硬體事件（今日判讀「要寫 Daily」區的那些）
+    const hwByBase = {};
+    Object.values(st.groups || {}).forEach(g => { const t = triageOf(g); if (t && t.zone === 'write') { const b = dailyBase(g.hostname); (hwByBase[b] = hwByBase[b] || []).push(g); } });
+    const maint = detectMaint(st.downUpEvents);
+    const maintByBase = {};
+    Object.entries(maint).forEach(([h, ws]) => { maintByBase[dailyBase(h)] = (maintByBase[dailyBase(h)] || []).concat(ws); });
 
     const maxOf = arr => { const v = arr.filter(x => x !== null && x !== undefined && isFinite(x)); return v.length ? Math.round(Math.max(...v)) : null; };
     const pctNum = s => { const n = parseInt(s, 10); return isFinite(n) ? n : null; };
     const fmtAlarmTs = s => { const m = s.match(/^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})/); return m ? m[1] + ' ' + m[2] : ''; };
 
-    const rows = [], yellow = new Set(), notify = [], notes = [];
-    cfg.list.forEach(([name, ver0, model0]) => {
-      const b = dailyBase(name);
+    const notify = [], notes = [];
+    const one = (name, ver0, model0, b, inList) => {
       const ds = byBase[b] || [];
-      if (!ds.length) {
-        rows.push([name, ver0, model0, '無資料', '無資料', '無資料', inspector]);
-        notes.push(['缺資料', name, 'raw data 中沒有這台設備']);
-        return;
-      }
-      const mem = maxOf(ds.flatMap(d => [...(d.res || []).map(r => r.mem), pctNum(d.memUsage)]));
-      const cpu = maxOf(ds.flatMap(d => [...(d.res || []).map(r => r.cpu5s), pctNum(d.cpuUsage)]));
+      if (!ds.length) return { name, ver: ver0, model: model0, inList, hasData: false, mem: null, cpu: null, items: [], hints: [], down: false };
+      // 有 Master RE 就用 Master 的數值（跟 daily_check.py 及原本的 Daily 表一致），沒有才取最大值
+      const allRes = ds.flatMap(d => d.res || []), master = allRes.filter(r => /master/i.test(r.state || ''));
+      const pool = master.length ? master : allRes;
+      const mem = maxOf(pool.length ? pool.map(r => r.mem) : ds.map(d => pctNum(d.memUsage)));
+      const cpu = maxOf(pool.length ? pool.map(r => r.cpu5s != null ? r.cpu5s : r.cpuNow) : ds.map(d => pctNum(d.cpuUsage)));   // 舊版 Junos 沒有「5 sec」字樣
       const ver = (ds.find(d => d.version) || {}).version || ver0;
       const model = model0;   // 型號一律沿用清單（routing-engine 輸出的 Model 是 RE 板卡，不是機型）
-      if (ver !== ver0) notes.push(['版本變動', name, ver0 + ' → ' + ver]);
+      if (inList && ver0 && ver !== ver0) notes.push(['版本變動', name, ver0 + ' → ' + ver]);
 
-      const items = [];
+      const items = [], hints = [];
       if (mem !== null && mem > DAILY_THRESHOLD) items.push('RE Memory ' + mem + '%');
       if (cpu !== null && cpu > DAILY_THRESHOLD) items.push('RE CPU ' + cpu + '%');
       ds.forEach(d => (d.alarmLines || []).forEach(l => {
@@ -1663,6 +1776,20 @@ class Component extends DCLogic {
         const it = 'Alarm: ' + txt + ' (' + ts + ')';
         if (!items.includes(it)) items.push(it);
       }));
+      // 硬體事件寫在介面前；FPC 上下電只當提示（前一天表上有記 offline 才寫）
+      const fruSeen = new Map();
+      (hwByBase[b] || []).sort((x, y) => (x.first || 0) - (y.first || 0)).forEach(g => {
+        const h = hwText(g);
+        if (h.fru) {
+          if (/^PIC:/i.test(h.key)) return;
+          const prev = fruSeen.get(h.key);
+          if (!prev || /online|offline/.test(h.text)) fruSeen.set(h.key, h.text);
+          return;
+        }
+        if (!items.includes(h.text)) items.push(h.text);
+      });
+      fruSeen.forEach(t => hints.push('⚠ ' + t + '：前一天表上有記這張卡 offline 才寫'));
+      (maintByBase[b] || []).forEach(m => hints.push(maintNote(m)));
       // Link down / up：依實體介面彙整
       const byIf = {};
       (duByBase[b] || []).forEach(e => { const k = physIf(e.identifier); (byIf[k] = byIf[k] || []).push(e); });
@@ -1675,7 +1802,7 @@ class Component extends DCLogic {
         } else if (open.length) {
           const t = open[open.length - 1].downLast;
           items.push(ifn + ' down (' + fmtDT(t) + ')');
-          notify.push([name, ifn, fmtDT(t)]);
+          if (inList) notify.push([name, ifn, fmtDT(t)]);
           down = true;
         } else {
           // 斷線次數：每個 down→up 算一次；同一實體介面的邏輯單元（.0）取最大值，不重複相加
@@ -1691,13 +1818,45 @@ class Component extends DCLogic {
         const end = f.first && f.last && f.first.toDateString() === f.last.toDateString() ? fmtDT(f.last).slice(-5) : fmtDT(f.last);
         items.push('BFD ' + f.label.replace('（', ' (').replace('）', ')') + ' flapping (' + fmtDT(f.first) + '~' + end + ')');   // 不標黃
       });
-      if (down) yellow.add(rows.length);
-      rows.push([name, ver, model, mem === null ? '無資料' : mem / 100, cpu === null ? '無資料' : cpu / 100, items.length ? items.join('\n') : 'Normal', inspector]);
-      if (mem === null || cpu === null) notes.push(['缺 CPU/Memory', name, 'raw data 中沒有 show chassis routing-engine 輸出']);
+      if (inList && (mem === null || cpu === null)) notes.push(['缺 CPU/Memory', name, 'raw data 中沒有 show chassis routing-engine 輸出']);
+      return { name, ver, model, inList, hasData: true, mem, cpu, items, hints, down };
+    };
+
+    const entries = [];
+    cfg.list.forEach(([name, ver0, model0]) => {
+      const b = dailyBase(name);
+      const e = one(name, ver0, model0, b, true);
+      if (!e.hasData) notes.push(['缺資料', name, 'raw data 中沒有這台設備']);
+      entries.push(e);
     });
-    Object.keys(byBase).forEach(b => {
+    Object.keys(byBase).sort().forEach(b => {
       if (listed.has(b) || ignore.has(b)) return;
-      notes.push(['清單外設備', byBase[b][0].hostname, '不在 85 台清單中，未列入表格']);
+      const d0 = byBase[b][0];
+      notes.push(['清單外設備', d0.hostname, '不在 Daily 清單中，未列入表格']);
+      entries.push(one(d0.hostname, d0.version || '', '', b, false));
+    });
+    return { entries, notes, notify, hasList: cfg.list.length > 0 };
+  };
+
+  exportDailyCheck = () => {
+    const st = this.state;
+    if (!(st.rawFiles || []).length) { window.alert('請先上傳當天的 raw log。'); return; }
+    if (!loadDaily().list.length) { window.alert('還沒有設備清單：請先按「設定 Daily 清單」，匯入上一份 Daily check Excel（只會存在這台電腦的瀏覽器）。'); return; }
+    let inspector = '';
+    try { inspector = localStorage.getItem('jla_daily_inspector') || ''; } catch {}
+    const ans = window.prompt('檢查人員（可留白）', inspector);
+    if (ans === null) return;
+    inspector = ans.trim();
+    try { localStorage.setItem('jla_daily_inspector', inspector); } catch {}
+
+    const { entries, notes, notify } = this.computeDaily(st);
+    const rows = [], yellow = new Set();
+    entries.filter(e => e.inList).forEach(e => {
+      if (e.down) yellow.add(rows.length);
+      rows.push([e.name, e.ver, e.model,
+        !e.hasData ? '無資料' : e.mem === null ? '無資料' : e.mem / 100,
+        !e.hasData ? '無資料' : e.cpu === null ? '無資料' : e.cpu / 100,
+        !e.hasData ? '無資料' : (e.items.length ? e.items.join('\n') : 'Normal'), inspector]);
     });
 
     const styleFn = (ri, ci, v) => {
@@ -1732,13 +1891,16 @@ class Component extends DCLogic {
     const isSeenView = view.kind === 'seen' && !isSearching;
     const isFlap = view.kind === 'flap' && !isSearching;
     const isTriage = view.kind === 'urgent' && !isSearching;
-    const isListView = !isDashboard && !isDevices && !isCpuMem && !isSeenView && !isFlap && !isTriage;
+    const isFill = view.kind === 'fill' && !isSearching;
+    const isListView = !isDashboard && !isDevices && !isCpuMem && !isSeenView && !isFlap && !isTriage && !isFill;
     // 介面狂跳
     const since = st.since || null;
     const flaps = mergeFlaps(computeFlaps(st.duTracker, since));
+    const maint = detectMaint(st.downUpEvents);
+    const maintFor = (host, from, to) => (maint[host] || []).filter(m => (!from || m.end >= from) && (!to || m.start <= to)).map(maintNote).join('\n');
     const flapStillDownCount = flaps.filter(f => f.stillDown).length;
     const flapRows = flaps.map(f => ({
-      hostname: f.hostname, label: f.label, kind: f.kind, downs: f.downs, note: f.note || '',
+      hostname: f.hostname, label: f.label, kind: f.kind, downs: f.downs, note: f.note || (f.kind === '介面' ? maintFor(f.hostname, f.first, f.last) : ''),
       range: fmtDT(f.first) + ' ~ ' + fmtDT(f.last),
       statusText: f.stillDown ? '✖ 目前 Down' : f.unknown ? '？log 沒記錄 Up' : '✔ 已恢復 Up',
       statusColor: f.stillDown ? 'oklch(0.72 0.19 25)' : f.unknown ? 'oklch(0.65 0.01 260)' : 'oklch(0.72 0.15 150)',
@@ -1797,11 +1959,25 @@ class Component extends DCLogic {
           return { hosts: host, badge: '🔁 ' + fs.length + ' 個介面狂跳', color: 'oklch(0.85 0.13 95)', badgeBg: 'oklch(0.78 0.15 95 / 0.18)',
             title: fs.map(f => f.label + '（' + f.downs + '）').join('、'),
             sub: fmtDT(first) + ' ~ ' + fmtDT(last) + '　' + (still ? still + ' 個目前仍是 Down' : '全部已恢復 Up') + '　（括號內是 Down 次數）',
-            note: '', select: () => this.setState({ searchQuery: host, selectedKey: null, listLimit: LIST_PAGE }) };
+            note: maintFor(host, first, last), select: () => this.setState({ searchQuery: host, selectedKey: null, listLimit: LIST_PAGE }) };
         }).sort((a, b) => b.title.length - a.title.length);
       })(),
     ];
     const triWriteTotal = triEvents.length + triWrite.length;
+    // 填表模式（只在需要時計算）
+    const daily = (isFill || hasData) ? this.computeDaily(st) : { entries: [], hasList: false };
+    const fillEntries = daily.entries.filter(e => e.hasData);
+    const fillRows = isFill ? fillEntries.map(e => {
+      const text = e.items.length ? e.items.join('\n') : 'Normal';
+      const copied = st.copiedKey === e.name;
+      return {
+        name: e.name, mem: e.mem === null ? '無資料' : e.mem + '%', cpu: e.cpu === null ? '無資料' : e.cpu + '%',
+        text, textColor: text === 'Normal' ? 'oklch(0.62 0.01 260)' : 'oklch(0.92 0.006 260)',
+        notInList: !e.inList, down: e.down, hints: e.hints.map(t => ({ text: t })),
+        copy: () => this.copyText(e.name, text), copyLabel: copied ? '✓ 已複製' : '複製', copyBg: copied ? 'oklch(0.72 0.15 150 / 0.25)' : 'oklch(0.68 0.14 235 / 0.15)',
+        rowStyle: 'padding:10px 12px;margin-bottom:8px;border-radius:7px;border:1px solid ' + (!e.inList ? 'oklch(0.78 0.15 95 / 0.6)' : 'oklch(0.3 0.012 260)') + ';background:' + (!e.inList ? 'oklch(0.78 0.15 95 / 0.14)' : 'oklch(0.21 0.012 260)') + ';',
+      };
+    }) : [];
 
     // 清單用：只算畫面上需要的欄位（輕量）
     const decorateGroup = (g) => ({
@@ -1985,13 +2161,19 @@ class Component extends DCLogic {
       deviceCount: Object.keys(devicesObj).length,
       selectUrgent: this.selectUrgent,
       urgentCount: triWriteTotal,
+      isFill, fillRows, fillCount: fillEntries.length, fillAbnormalCount: fillEntries.filter(e => e.items.length).length,
+      fillMissingCount: fillEntries.filter(e => !e.inList).length, hasFillMissing: fillEntries.some(e => !e.inList), fillNoList: !daily.hasList,
+      selectFill: this.selectFill,
+      fillNavStyle: 'padding:9px 10px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:700;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;gap:6px;color:oklch(0.85 0.08 235);border:1px solid oklch(0.68 0.14 235 / 0.45);background:' + (isFill ? 'oklch(0.68 0.14 235 / 0.22)' : 'oklch(0.68 0.14 235 / 0.08)') + ';',
       isTriage, triEvents, triWrite, triLook, triNoise, triWriteTotal, noTriWrite: triWriteTotal === 0,
       triLookCount: triLook.length, triNoiseCount: triNoise.length,
       showLook: !!st.showLook, showNoise: !!st.showNoise, toggleLook: this.toggleLook, toggleNoise: this.toggleNoise,
       lookToggleLabel: st.showLook ? '收起 ▲' : '展開 ▼', noiseToggleLabel: st.showNoise ? '收起 ▲' : '展開 ▼',
       sinceInput: toLocalInput(since), hasSince: !!since, sinceLabel: since ? fmtFull(since) : '',
       sinceBorder: since ? 'oklch(0.78 0.15 95 / 0.7)' : 'oklch(0.34 0.012 260)',
-      onSinceChange: this.onSinceChange, sinceLastExport: this.sinceLastExport, clearSince: this.clearSince,
+      onSinceChange: this.onSinceChange, sinceFromLog: this.sinceFromLog,
+      ...(() => { const c = collectRange(devicesObj); return { hasCollect: !!c.start, collectLabel: c.start ? (fmtDT(new Date(c.start)) + ' ~ ' + fmtDT(new Date(c.end)).slice(-5)) : '' }; })(),
+      sinceSourceLabel: since && st.sinceSource === 'hist' ? '（上一次收 log）' : since && st.sinceSource === 'guess' ? '（沒有上次紀錄，用這次收 log 往前 24 小時）' : '', sinceLastExport: this.sinceLastExport, clearSince: this.clearSince,
       urgentNavStyle: 'padding:9px 10px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:700;margin-bottom:4px;color:oklch(0.8 0.19 25);border:1px solid oklch(0.62 0.21 25 / 0.45);background:' + (view.kind === 'urgent' && !isSearching ? 'oklch(0.62 0.21 25 / 0.28)' : 'oklch(0.62 0.21 25 / 0.1)') + ';',
       modules, keywordChips,
       isDashboard, isDevices, isListView,

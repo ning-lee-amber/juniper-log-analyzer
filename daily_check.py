@@ -101,10 +101,15 @@ class Device:
         self.res = []          # [(state, mem, cpu)]
         self.alarms = []       # [(ts, text)]
         self.if_events = {}    # iface -> [(time, 'down'|'up', admin_down)]
+        self.bfd = {}          # peer ip -> [time of 'Up -> Down']
+        self.bfd_if = {}       # peer ip -> interface
 
 
 def parse_logs(paths, year):
     devices = {}
+    # 同一台設備若連續跑兩次 show log messages，同一行會出現兩次：
+    # 每段指令輸出各自計數，只有比之前任何一段出現更多次的那幾行才算新的
+    line_max = {}
 
     def dev(h):
         b = base_name(h)
@@ -136,10 +141,12 @@ def parse_logs(paths, year):
                     if item and item not in d.alarms:
                         d.alarms.append(item)
 
+        block = {}
         for line in lines:
             pm = RE_PROMPT.search(line)
             if pm:
                 flush()
+                block = {}
                 mode, buf = None, []
                 host = pm.group(1)
                 cmd = line[pm.end():]
@@ -162,7 +169,26 @@ def parse_logs(paths, year):
             m = RE_SYSLOG.match(line)
             if not m:
                 continue
+            raw = line.strip()
+            block[raw] = block.get(raw, 0) + 1
+            if block[raw] <= line_max.get(raw, 0):
+                continue                        # 前一段輸出已經算過這一行
+            line_max[raw] = block[raw]
             msg = m.group(7)
+            try:
+                t = dt.datetime(year, MONTHS[m.group(1)], int(m.group(2)), int(m.group(3)), int(m.group(4)), int(m.group(5)))
+            except (KeyError, ValueError):
+                continue
+            if re.search(r'bfd', msg, re.I):
+                # BFD 只記 Down 不記 Up：不拿來判斷介面斷線，另外算 BFD 對端狂跳
+                d = dev(m.group(6))
+                mi = re.search(r'interface:\s*([\w\-/:.]+?),\s*peer addr:\s*([\d.]+)', msg, re.I)
+                if mi:
+                    d.bfd_if[mi.group(2)] = mi.group(1)
+                mb = re.search(r'BFD Session ([\d.]+).*\bUp\s*->\s*Down', msg, re.I)
+                if mb:
+                    d.bfd.setdefault(mb.group(1), []).append(t)
+                continue
             im = RE_IFACE.search(msg)
             if not im:
                 continue
@@ -174,10 +200,6 @@ def parse_logs(paths, year):
             elif re.search(r'\bup\b', msg, re.I) or 'LINK_UP' in msg:
                 state = 'up'
             else:
-                continue
-            try:
-                t = dt.datetime(year, MONTHS[m.group(1)], int(m.group(2)), int(m.group(3)), int(m.group(4)), int(m.group(5)))
-            except (KeyError, ValueError):
                 continue
             admin = state == 'down' and bool(re.search(r'ifAdminStatus\s+down', msg, re.I))
             dev(m.group(6)).if_events.setdefault(phys_if(im.group(1)), []).append((t, state, admin))
@@ -203,7 +225,12 @@ def summarize(d, year):
             items.append('Alarm: %s (%s)' % (txt, ts))
     for ifn in sorted(d.if_events):
         evs = sorted(d.if_events[ifn])
-        downs_n = sum(1 for e in evs if e[1] == 'down')
+        # 斷線次數：由 Up（或一開始）變成 Down 才算一次；同一次斷線好幾行只算一次
+        downs_n, prev = 0, None
+        for e in evs:
+            if e[1] == 'down' and prev != 'down':
+                downs_n += 1
+            prev = e[1]
         if not downs_n:
             continue
         last_state = evs[-1][1]
@@ -221,6 +248,13 @@ def summarize(d, year):
             items.append('%s flapping (%s~%s)' % (ifn, fmt_dt(first), end))
         else:
             items.append('%s\t瞬斷，已恢復' % ifn)
+    for ip in sorted(d.bfd):
+        ts = sorted(d.bfd[ip])
+        if len(ts) < 3:
+            continue                            # 單次 BFD 不寫
+        end = ts[-1].strftime('%H:%M') if ts[-1].date() == ts[0].date() else fmt_dt(ts[-1])
+        ifn = d.bfd_if.get(ip)
+        items.append('BFD %s%s flapping (%s~%s)' % (ip, ' (%s)' % ifn if ifn else '', fmt_dt(ts[0]), end))   # 不標黃
     return mem, cpu, items, downs
 
 

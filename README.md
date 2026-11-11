@@ -30,7 +30,9 @@ During daily device health checks and maintenance windows, reading through long 
 - **Export to Excel** — export results for reporting
 - **今日判讀** — replaces the old urgent list: events are sorted into 要寫 Daily / 要看一下 / 已知雜訊 using the daily-check rules (PFEMAN repeats, logrotate, sshd, single I2C/Readback, BGP connect retries and service-card boot messages are known noise); the same message on several devices is merged into one row
 - **介面狂跳** — interfaces and BFD/BGP peers that went down 3+ times; the same peer flapping on two devices at once is merged and flagged as a peer/line problem
-- **只看這個時間之後** — hide events before a chosen time (e.g. the last Daily Check export)
+- **填表模式** — one row per device found in the logs (in Daily list order) with the exact log Analysis text the Daily export will write and a copy button; devices missing from the Daily list are highlighted yellow
+- **疑似維護** — a device where 5+ interfaces go down within one hour is flagged as a possible maintenance window
+- **只看這個時間之後** — hide events before a chosen time; 「取 log 時間」 works out when the logs were collected (RE Start time + Uptime) and jumps to the previous collection
 - **Daily Check export (F1)** — one click builds the daily check sheet with fixed rules, no AI needed (see below)
 - **No installation** — runs in the browser; UI in Traditional Chinese
 
