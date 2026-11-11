@@ -32,6 +32,10 @@ During daily device health checks and maintenance windows, reading through long 
 - **介面狂跳** — interfaces and BFD/BGP peers that went down 3+ times; the same peer flapping on two devices at once is merged and flagged as a peer/line problem
 - **填表模式** — one row per device found in the logs (in Daily list order) with the exact log Analysis text the Daily export will write and a copy button; devices missing from the Daily list are highlighted yellow
 - **疑似維護** — a device where 5+ interfaces go down within one hour is flagged as a possible maintenance window
+- **所有區塊** — the Daily list now carries every section of the workbook (F1 / WVPN / Allot / A10 / Tapping); A10 (`show cpu`, `show memory`), PICOS (`show system cpu/mem`) and whitebox (`show system cpu-usage/memory-usage`) outputs are parsed, and the export writes each section with its grey header row
+- **昨天比對** — each log Analysis line is tagged 🆕 新發生 / ↻ 延續中 / ✓ 已解除 against yesterday's sheet, and yesterday's down / flapping / hardware lines are verified one by one against today's log
+- **我的規則** — 「加入雜訊」/「標成要寫」 on any triage row teaches the tool your own classification; rules live in the browser and are included in the backup file
+- **一行摘要** — a LINE-ready summary (per-section counts, 需通知客戶, 狂跳, 硬體/告警, 已解除) with a copy button
 - **只看這個時間之後** — hide events before a chosen time; 「取 log 時間」 works out when the logs were collected (RE Start time + Uptime) and jumps to the previous collection
 - **Daily Check export (F1)** — one click builds the daily check sheet with fixed rules, no AI needed (see below)
 - **No installation** — runs in the browser; UI in Traditional Chinese
