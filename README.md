@@ -28,6 +28,9 @@ During daily device health checks and maintenance windows, reading through long 
 - **Viewed history** — hides logs you have already reviewed, so you focus on what's new
 - **Search** — filter by PID, interface, IP address, error code, or any keyword
 - **Export to Excel** — export results for reporting
+- **今日判讀** — replaces the old urgent list: events are sorted into 要寫 Daily / 要看一下 / 已知雜訊 using the daily-check rules (PFEMAN repeats, logrotate, sshd, single I2C/Readback, BGP connect retries and service-card boot messages are known noise); the same message on several devices is merged into one row
+- **介面狂跳** — interfaces and BFD/BGP peers that went down 3+ times; the same peer flapping on two devices at once is merged and flagged as a peer/line problem
+- **只看這個時間之後** — hide events before a chosen time (e.g. the last Daily Check export)
 - **Daily Check export (F1)** — one click builds the daily check sheet with fixed rules, no AI needed (see below)
 - **No installation** — runs in the browser; UI in Traditional Chinese
 
