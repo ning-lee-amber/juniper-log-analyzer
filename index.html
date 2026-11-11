@@ -624,7 +624,7 @@
             <div><div style="color:oklch(0.55 0.01 260);">PID</div><div>{{selectedGroup.pidDisplay}}</div></div>
             <div><div style="color:oklch(0.55 0.01 260);">Interface</div><div>{{selectedGroup.ifDisplay}}</div></div>
             <div><div style="color:oklch(0.55 0.01 260);">IP</div><div>{{selectedGroup.ipDisplay}}</div></div>
-            <div><div style="color:oklch(0.55 0.01 260);">發生次數</div><div>{{selectedGroup.count}}</div></div>
+            <div><div style="color:oklch(0.55 0.01 260);">發生次數</div><div>{{selectedGroup.count}}<span style="color:oklch(0.55 0.01 260);font-size:11px;">{{selectedGroup.countAllNote}}</span></div></div>
             <div><div style="color:oklch(0.55 0.01 260);">時間範圍</div><div>{{selectedGroup.timeRange}}</div></div>
           </div>
 
@@ -1163,15 +1163,25 @@ function triageOf(g){
   g._tri = r;
   return r;
 }
+// 「只看這個時間之後」的次數和起訖時間（沒設時間就是整份 log）
+let CUR_SINCE = null;
+function sinceStat(g){
+  const since = CUR_SINCE;
+  if (!since || !g.ts) return { count: g.count, first: g.first, last: g.last };
+  let n = 0, f = null;
+  for (const t of g.ts) if (!t || t >= since) { n++; if (t && (f === null || t < f)) f = t; }
+  return { count: n, first: f ? new Date(f) : g.first, last: g.last };
+}
 // 不同設備的同一種訊息合併成一列（例如 3 台同時 logrotate）
 function mergeGroups(list){
   const m = new Map();
-  list.forEach(g => {
+  list.forEach(g0 => {
+    const g = { ...g0, ...sinceStat(g0) };
     const k = (g.tag || g.facility || '') + '|' + normalizeMsg(g.sample).slice(0, 140);
     const cur = m.get(k);
-    if (!cur) m.set(k, { groups: [g], hosts: [g.hostname], count: g.count, first: g.first, last: g.last, severity: g.severity });
+    if (!cur) m.set(k, { groups: [g0], hosts: [g.hostname], count: g.count, first: g.first, last: g.last, severity: g.severity });
     else {
-      cur.groups.push(g); if (!cur.hosts.includes(g.hostname)) cur.hosts.push(g.hostname);
+      cur.groups.push(g0); if (!cur.hosts.includes(g.hostname)) cur.hosts.push(g.hostname);
       cur.count += g.count; cur.severity = Math.min(cur.severity, g.severity);
       if (g.first && (!cur.first || g.first < cur.first)) cur.first = g.first;
       if (g.last && (!cur.last || g.last > cur.last)) cur.last = g.last;
@@ -1752,6 +1762,7 @@ class Component extends DCLogic {
         // 保留最新的 300 筆原始日誌（含時間），點開時只顯示「只看這個時間之後」的
         if (!g.rawT) g.rawT = [];
         g.raws.push(entry.raw); g.rawT.push(entry.date ? entry.date.getTime() : 0);
+        (g.ts || (g.ts = [])).push(entry.date ? entry.date.getTime() : 0);   // 每一次發生的時間（算「只看這個時間之後」的次數）
         if (g.raws.length > 300) { g.raws.shift(); g.rawT.shift(); }
       }
       if (mode) finalizeDeviceBlock(mode, bufferHost, currentVersion, buffer);
@@ -2140,6 +2151,7 @@ class Component extends DCLogic {
   };
 
   renderVals() {
+    CUR_SINCE = this.state.since || null;
     const st = this.state;
     const hasData = (st.rawFiles || []).length > 0;
     const groupsObj = st.groups || {};
@@ -2269,18 +2281,21 @@ class Component extends DCLogic {
     const decorateGroup = (g) => ({
       urgentReason: urgentReason(g) || '',
       ...g,
+      ...sinceStat(g),
+      countAll: g.count,
       isSeen: !!seen[g.key],
       isLowPriority: isIgnored(g),
       seenLabel: seen[g.key] ? ('✓ 已看過 ' + fmtFull(seen[g.key].seenAt)) : '',
       sevColor: sevColor(g.severity),
-      isStorm: g.count >= 5,
-      timeRange: fmtDT(g.first) + ' → ' + fmtDT(g.last),
+      isStorm: sinceStat(g).count >= 5,
+      timeRange: fmtDT(sinceStat(g).first) + ' → ' + fmtDT(g.last),
       select: () => this.selectGroup(g.key),
       rowStyle: 'display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-bottom:1px solid oklch(0.25 0.012 260);cursor:pointer;opacity:' + (seen[g.key] && st.selectedKey !== g.key ? '0.6' : '1') + ';background:' + (st.selectedKey === g.key ? 'oklch(0.26 0.02 235)' : 'transparent') + ';',
     });
     // 詳情面板用：只有選到的那一筆才計算參考資料（較重）
     const decorateDetail = (g) => ({
       ...decorateGroup(g),
+      countAllNote: CUR_SINCE && g.count !== sinceStat(g).count ? '（整份 log 共 ' + g.count + '）' : '',
       keywordList: [...g.keywords],
       tagDisplay: (g.facility || '-') + (g.tag ? ('-' + g.tag) : ''),
       pidDisplay: g.pid || '-',
@@ -2329,7 +2344,7 @@ class Component extends DCLogic {
     const maxModule = Math.max(1, ...Object.values(st.moduleCounts || {}).map(m => m.total));
     const dashboardModuleDist = Object.entries(st.moduleCounts || {}).sort((a, b) => b[1].total - a[1].total).map(([name, c]) => ({ name, count: c.total, pct: Math.round(c.total / maxModule * 100) + '%' }));
 
-    const topRecurring = Object.values(groupsObj).filter(notSeen).sort((a, b) => b.count - a.count).slice(0, 10).map(g => ({ ...g, select: () => this.selectGroup(g.key) }));
+    const topRecurring = Object.values(groupsObj).filter(notSeen).sort((a, b) => sinceStat(b).count - sinceStat(a).count).slice(0, 10).map(g => ({ ...g, ...sinceStat(g), select: () => this.selectGroup(g.key) }));
 
     const devicesArr = Object.values(devicesObj).sort((a, b) => a.hostname.localeCompare(b.hostname)).map(d => {
       const errCount = d.errorCount || 0;
