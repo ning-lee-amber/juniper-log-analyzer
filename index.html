@@ -880,9 +880,16 @@ function loadSince(){ try { const v = Number(localStorage.getItem(SINCE_KEY)); r
 function saveSince(v){ try { if (v) localStorage.setItem(SINCE_KEY, String(v)); else localStorage.removeItem(SINCE_KEY); } catch {} }
 function toLocalInput(ms){ if (!ms) return ''; const d = new Date(ms); const p = n => String(n).padStart(2, '0'); return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes()); }
 const COLLECT_HIST_KEY = 'jla_collect_hist_v1';
+// 收 log 的時間：以多數設備為準（中位數前後 12 小時內），系統時間跑掉的設備不算進來，另外列出
 function collectRange(devices){
-  const ts = Object.values(devices || {}).map(d => d.collectedAt).filter(Boolean);
-  return ts.length ? { start: Math.min(...ts), end: Math.max(...ts) } : { start: null, end: null };
+  const all = Object.values(devices || {}).filter(d => d.collectedAt);
+  if (!all.length) return { start: null, end: null, odd: [] };
+  const sorted = all.map(d => d.collectedAt).sort((a, b) => a - b);
+  const med = sorted[Math.floor(sorted.length / 2)];
+  const ok = all.filter(d => Math.abs(d.collectedAt - med) <= 12 * 3600000);
+  const odd = all.filter(d => Math.abs(d.collectedAt - med) > 12 * 3600000).map(d => d.hostname);
+  const ts = ok.map(d => d.collectedAt);
+  return { start: Math.min(...ts), end: Math.max(...ts), odd };
 }
 // 每次收 log 有哪些設備（只存在這台電腦的瀏覽器），給填表模式比較「跟前一天比少了 / 多了哪些設備」
 const COLLECT_DEVS_KEY = 'jla_collect_devs_v1';
@@ -1798,7 +1805,7 @@ class Component extends DCLogic {
   sinceFromLog = () => {
     const cur = collectRange(this.state.devices).start;
     if (!cur) { window.alert('log 裡找不到收 log 的時間（需要 show chassis routing-engine 的 Start time 和 Uptime）。'); return; }
-    const prevs = loadCollectHist().filter(x => x < cur - 2 * 3600000);
+    const prevs = loadCollectHist().filter(x => x < cur - 2 * 3600000 && x > cur - 7 * 24 * 3600000);   // 只用 7 天內的紀錄（舊的錯誤時間不採用）
     // 沒有紀錄時推算：星期一收的 log 包含五六日，所以往前推到星期五；其他天往前 24 小時
     const back = new Date(cur).getDay() === 1 ? 3 : 1;
     const v = prevs.length ? prevs[prevs.length - 1] : cur - back * 24 * 3600000;
@@ -2463,7 +2470,7 @@ class Component extends DCLogic {
       sinceInput: toLocalInput(since), hasSince: !!since, sinceLabel: since ? fmtFull(since) : '',
       sinceBorder: since ? 'oklch(0.78 0.15 95 / 0.7)' : 'oklch(0.34 0.012 260)',
       onSinceChange: this.onSinceChange, sinceFromLog: this.sinceFromLog,
-      ...(() => { const c = collectRange(devicesObj); return { hasCollect: !!c.start, collectLabel: c.start ? (fmtDT(new Date(c.start)) + ' ~ ' + fmtDT(new Date(c.end)).slice(-5)) : '' }; })(),
+      ...(() => { const c = collectRange(devicesObj); return { hasCollect: !!c.start, collectLabel: c.start ? (fmtDT(new Date(c.start)) + ' ~ ' + fmtDT(new Date(c.end)).slice(-5) + (c.odd.length ? '（⚠ 系統時間異常、已排除：' + c.odd.join('、') + '）' : '')) : '' }; })(),
       sinceSourceLabel: since && st.sinceSource === 'hist' ? '（上一次收 log）' : since && st.sinceSource === 'guess' ? '（沒有上次紀錄，推算前一個工作日收 log 的時間）' : '', sinceLastExport: this.sinceLastExport, clearSince: this.clearSince,
       urgentNavStyle: 'padding:9px 10px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:700;margin-bottom:4px;color:oklch(0.8 0.19 25);border:1px solid oklch(0.62 0.21 25 / 0.45);background:' + (view.kind === 'urgent' && !isSearching ? 'oklch(0.62 0.21 25 / 0.28)' : 'oklch(0.62 0.21 25 / 0.1)') + ';',
       modules, keywordChips,
