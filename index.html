@@ -230,6 +230,24 @@
               <span style="font-size:10.5px;padding:1px 8px;border-radius:10px;white-space:nowrap;background:oklch(0.78 0.15 95 / 0.25);color:oklch(0.9 0.12 95);">⚠ {{fillMissingCount}} 台總表找不到（黃底）</span>
             </sc-if>
           </div>
+          <div style="padding:10px 12px;margin:0 0 12px;border-radius:7px;background:oklch(0.21 0.012 260);border:1px solid oklch(0.3 0.012 260);font-size:12.5px;line-height:1.7;">
+            <div style="font-weight:700;margin-bottom:2px;">跟前一次收 log 比較</div>
+            <sc-if value="{{noPrevCollect}}" hint-placeholder-val="{{false}}">
+              <div style="color:oklch(0.62 0.01 260);">還沒有前一次的紀錄。工具會記住這次 log 裡有哪些設備，下次上傳 log 時就會顯示少了 / 多了哪幾台。</div>
+            </sc-if>
+            <sc-if value="{{hasPrevCollect}}" hint-placeholder-val="{{false}}">
+              <div style="color:oklch(0.62 0.01 260);">前一次收 log：{{prevCollectLabel}}</div>
+              <sc-if value="{{sameAsPrev}}" hint-placeholder-val="{{false}}">
+                <div style="color:oklch(0.72 0.15 150);">✓ 設備跟前一次一樣</div>
+              </sc-if>
+              <sc-if value="{{hasGone}}" hint-placeholder-val="{{false}}">
+                <div style="color:oklch(0.8 0.15 25);">✖ 少了 {{goneCount}} 台（前一次有、這次 log 沒有，可能下線或這次沒撈到）：{{goneList}}</div>
+              </sc-if>
+              <sc-if value="{{hasNew}}" hint-placeholder-val="{{false}}">
+                <div style="color:oklch(0.82 0.1 235);">🆕 多了 {{newCount}} 台（前一次沒有，可能新上線）：{{newList}}</div>
+              </sc-if>
+            </sc-if>
+          </div>
           <sc-if value="{{fillNoList}}" hint-placeholder-val="{{false}}">
             <div style="padding:10px 12px;margin:0 0 12px;border-radius:6px;background:oklch(0.78 0.15 95 / 0.12);border:1px solid oklch(0.78 0.15 95 / 0.4);font-size:12.5px;color:oklch(0.88 0.1 95);">還沒有 Daily 設備清單，所以每台都會顯示「總表找不到」。請先按上方「設定 Daily 清單」匯入 Daily check Excel。</div>
           </sc-if>
@@ -240,6 +258,9 @@
                 <span style="font-size:11.5px;color:oklch(0.62 0.01 260);">Memory {{r.mem}}　CPU {{r.cpu}}</span>
                 <sc-if value="{{r.notInList}}" hint-placeholder-val="{{false}}">
                   <span style="font-size:10.5px;padding:1px 8px;border-radius:10px;white-space:nowrap;background:oklch(0.78 0.15 95 / 0.3);color:oklch(0.92 0.12 95);">⚠ 總表找不到這台</span>
+                </sc-if>
+                <sc-if value="{{r.isNew}}" hint-placeholder-val="{{false}}">
+                  <span style="font-size:10.5px;padding:1px 8px;border-radius:10px;white-space:nowrap;background:oklch(0.68 0.14 235 / 0.25);color:oklch(0.88 0.08 235);">🆕 前一次 log 沒有</span>
                 </sc-if>
                 <sc-if value="{{r.down}}" hint-placeholder-val="{{false}}">
                   <span style="font-size:10.5px;padding:1px 8px;border-radius:10px;white-space:nowrap;background:oklch(0.62 0.21 25 / 0.25);color:oklch(0.85 0.14 25);">✖ 有未恢復的 down，Excel 會整列標黃並列入需通知客戶</span>
@@ -786,6 +807,22 @@ const COLLECT_HIST_KEY = 'jla_collect_hist_v1';
 function collectRange(devices){
   const ts = Object.values(devices || {}).map(d => d.collectedAt).filter(Boolean);
   return ts.length ? { start: Math.min(...ts), end: Math.max(...ts) } : { start: null, end: null };
+}
+// 每次收 log 有哪些設備（只存在這台電腦的瀏覽器），給填表模式比較「跟前一天比少了 / 多了哪些設備」
+const COLLECT_DEVS_KEY = 'jla_collect_devs_v1';
+function loadCollectDevs(){ try { const v = JSON.parse(localStorage.getItem(COLLECT_DEVS_KEY) || '[]'); return Array.isArray(v) ? v.filter(x => x && x.t > 0 && Array.isArray(x.devs)) : []; } catch { return []; } }
+function rememberCollectDevs(t, names){
+  if (!t || !names.length) return;
+  const h = loadCollectDevs();
+  const cur = h.find(x => Math.abs(x.t - t) < 2 * 3600000);   // 同一次收 log 分好幾次上傳：合併
+  if (cur) cur.devs = [...new Set([...cur.devs, ...names])];
+  else h.push({ t, devs: [...new Set(names)] });
+  h.sort((a, b) => a.t - b.t);
+  try { localStorage.setItem(COLLECT_DEVS_KEY, JSON.stringify(h.slice(-30))); } catch {}
+}
+function prevCollectDevs(t){
+  const prev = loadCollectDevs().filter(x => x.t < t - 2 * 3600000);
+  return prev.length ? prev[prev.length - 1] : null;
 }
 function loadCollectHist(){ try { const v = JSON.parse(localStorage.getItem(COLLECT_HIST_KEY) || '[]'); return Array.isArray(v) ? v.filter(x => x > 0) : []; } catch { return []; } }
 function rememberCollect(t){
@@ -1420,7 +1457,10 @@ class Component extends DCLogic {
     // 只保留檔名與大小，不把整份檔案內容留在記憶體
     const rawFiles = [...(st.rawFiles || []), ...results.map(r => ({ name: r.name, size: r.text.length }))];
     this.setState({ rawFiles, ...parsed, loading: false, progress: 0, view: { kind: 'dashboard' }, selectedKey: null, listLimit: LIST_PAGE });
-    rememberCollect(collectRange(parsed.devices).start);   // 記下這次收 log 的時間，下次「取 log 時間」用
+    const cr = collectRange(parsed.devices);
+    rememberCollect(cr.start);   // 記下這次收 log 的時間，下次「取 log 時間」用
+    // 記下這次 log 裡有哪些設備（有 CPU/Memory 資料的才算），下次填表模式拿來比較
+    rememberCollectDevs(cr.start, Object.values(parsed.devices || {}).filter(d => d.res || d.memUsage).map(d => d.hostname));
   };
 
   resetAll = () => {
@@ -1967,13 +2007,20 @@ class Component extends DCLogic {
     // 填表模式（只在需要時計算）
     const daily = (isFill || hasData) ? this.computeDaily(st) : { entries: [], hasList: false };
     const fillEntries = daily.entries.filter(e => e.hasData);
+    // 跟前一次收 log 比較：少了 / 多了哪些設備
+    const curCollect = collectRange(devicesObj).start;
+    const prevRec = curCollect ? prevCollectDevs(curCollect) : null;
+    const prevDevs = prevRec ? new Set(prevRec.devs.map(dailyBase)) : null;
+    const curBases = new Set(fillEntries.map(e => dailyBase(e.name)));
+    const goneDevs = prevRec ? [...new Map(prevRec.devs.map(n => [dailyBase(n), n])).entries()].filter(([b]) => !curBases.has(b)).map(([, n]) => n) : [];
+    const newDevs = prevDevs ? fillEntries.filter(e => !prevDevs.has(dailyBase(e.name))).map(e => e.name) : [];
     const fillRows = isFill ? fillEntries.map(e => {
       const text = e.items.length ? e.items.join('\n') : 'Normal';
       const copied = st.copiedKey === e.name;
       return {
         name: e.name, mem: e.mem === null ? '無資料' : e.mem + '%', cpu: e.cpu === null ? '無資料' : e.cpu + '%',
         text, textColor: text === 'Normal' ? 'oklch(0.62 0.01 260)' : 'oklch(0.92 0.006 260)',
-        notInList: !e.inList, down: e.down, hints: e.hints.map(t => ({ text: t })),
+        notInList: !e.inList, down: e.down, hints: e.hints.map(t => ({ text: t })), isNew: !!(prevDevs && !prevDevs.has(dailyBase(e.name))),
         copy: () => this.copyText(e.name, text), copyLabel: copied ? '✓ 已複製' : '複製', copyBg: copied ? 'oklch(0.72 0.15 150 / 0.25)' : 'oklch(0.68 0.14 235 / 0.15)',
         rowStyle: 'padding:10px 12px;margin-bottom:8px;border-radius:7px;border:1px solid ' + (!e.inList ? 'oklch(0.78 0.15 95 / 0.6)' : 'oklch(0.3 0.012 260)') + ';background:' + (!e.inList ? 'oklch(0.78 0.15 95 / 0.14)' : 'oklch(0.21 0.012 260)') + ';',
       };
@@ -2162,6 +2209,10 @@ class Component extends DCLogic {
       selectUrgent: this.selectUrgent,
       urgentCount: triWriteTotal,
       isFill, fillRows, fillCount: fillEntries.length, fillAbnormalCount: fillEntries.filter(e => e.items.length).length,
+      hasPrevCollect: !!prevRec, noPrevCollect: !prevRec, prevCollectLabel: prevRec ? fmtDT(new Date(prevRec.t)) : '',
+      goneCount: goneDevs.length, hasGone: goneDevs.length > 0, goneList: goneDevs.join('、'),
+      newCount: newDevs.length, hasNew: newDevs.length > 0, newList: newDevs.join('、'),
+      sameAsPrev: !!prevRec && !goneDevs.length && !newDevs.length,
       fillMissingCount: fillEntries.filter(e => !e.inList).length, hasFillMissing: fillEntries.some(e => !e.inList), fillNoList: !daily.hasList,
       selectFill: this.selectFill,
       fillNavStyle: 'padding:9px 10px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:700;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;gap:6px;color:oklch(0.85 0.08 235);border:1px solid oklch(0.68 0.14 235 / 0.45);background:' + (isFill ? 'oklch(0.68 0.14 235 / 0.22)' : 'oklch(0.68 0.14 235 / 0.08)') + ';',
