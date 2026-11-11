@@ -52,6 +52,7 @@
 
       <div style="{{leftPanelStyle}}">
         <div onClick="{{selectUrgent}}" style="{{urgentNavStyle}}">⚠ 緊急處理 ({{urgentCount}})</div>
+        <div onClick="{{selectFlap}}" style="{{flapNavStyle}}"><span>🔁 介面狂跳</span><span style="{{flapBadgeStyle}}">{{flapCount}}</span></div>
         <div onClick="{{selectDashboard}}" style="{{dashboardNavStyle}}">📊 總覽 Dashboard</div>
         <div onClick="{{selectAlertError}}" style="{{alertErrorNavStyle}}">🚨 Alert/Error ({{alertErrorCount}})</div>
         <div onClick="{{selectDevices}}" style="{{devicesNavStyle}}">🖧 設備清單 ({{deviceCount}})</div>
@@ -74,6 +75,43 @@
       <div style="flex:1;overflow-y:auto;padding:20px;min-width:260px;">
 
         <sc-if value="{{isDashboard}}" hint-placeholder-val="{{false}}">
+
+          <sc-if value="{{hasFlaps}}" hint-placeholder-val="{{false}}">
+            <div style="background:oklch(0.21 0.012 260);border:1px solid oklch(0.3 0.012 260);border-radius:8px;border-color:oklch(0.78 0.15 95 / 0.55);margin-bottom:22px;overflow:hidden;">
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 14px;border-bottom:1px solid oklch(0.3 0.012 260);">
+                <div style="font-size:14px;font-weight:700;color:oklch(0.85 0.13 95);">🔁 介面狂跳 {{flapCount}} 個</div>
+                <sc-if value="{{hasFlapStillDown}}" hint-placeholder-val="{{false}}">
+                  <span style="font-size:11px;background:oklch(0.62 0.21 25 / 0.2);color:oklch(0.8 0.17 25);border:1px solid oklch(0.62 0.21 25 / 0.4);padding:2px 9px;border-radius:10px;">{{flapStillDownCount}} 個目前仍是 Down</span>
+                </sc-if>
+                <div onClick="{{selectFlap}}" style="margin-left:auto;font-size:12px;color:oklch(0.68 0.14 235);cursor:pointer;">看全部 →</div>
+              </div>
+              <div style="overflow-x:auto;">
+              <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+                <thead>
+                  <tr style="text-align:left;color:oklch(0.6 0.01 260);">
+                    <th style="padding:8px 10px;">設備</th><th style="padding:8px 10px;">介面 / 對端</th><th style="padding:8px 10px;">類型</th>
+                    <th style="padding:8px 10px;text-align:right;">Down 次數</th><th style="padding:8px 10px;">期間</th><th style="padding:8px 10px;">目前狀態</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <sc-for list="{{flapTop}}" as="f" hint-placeholder-count="5">
+                    <tr onClick="{{f.select}}" title="點一下查看這個介面的相關 log" style="border-top:1px solid oklch(0.27 0.012 260);cursor:pointer;">
+                      <td style="padding:7px 10px;font-weight:600;white-space:nowrap;">{{f.hostname}}</td>
+                      <td style="padding:7px 10px;white-space:nowrap;font-family:ui-monospace,Menlo,Consolas,monospace;color:oklch(0.9 0.006 260);">{{f.label}}</td>
+                      <td style="padding:7px 10px;color:oklch(0.65 0.01 260);white-space:nowrap;">{{f.kind}}</td>
+                      <td style="padding:7px 10px;text-align:right;font-weight:700;color:oklch(0.78 0.15 95);font-variant-numeric:tabular-nums;">{{f.downs}}</td>
+                      <td style="padding:7px 10px;white-space:nowrap;color:oklch(0.75 0.01 260);font-variant-numeric:tabular-nums;">{{f.range}}</td>
+                      <td style="padding:7px 10px;white-space:nowrap;font-weight:700;color:{{f.statusColor}};">{{f.statusText}}</td>
+                    </tr>
+                  </sc-for>
+                </tbody>
+              </table>
+              </div>
+            </div>
+          </sc-if>
+          <sc-if value="{{noFlaps}}" hint-placeholder-val="{{false}}">
+            <div style="font-size:12.5px;color:oklch(0.72 0.15 150);margin:0 0 18px;">✓ 沒有介面狂跳（沒有介面或對端 Down 達 {{flapMin}} 次）</div>
+          </sc-if>
 
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:20px;margin-bottom:26px;">
             <div style="min-width:0;">
@@ -164,6 +202,38 @@
               </div>
             </div>
           </div>
+        </sc-if>
+
+        <sc-if value="{{isFlap}}" hint-placeholder-val="{{false}}">
+          <div style="font-size:14px;font-weight:700;margin:0 0 6px;">🔁 介面狂跳（Up → Down 達 {{flapMin}} 次以上）</div>
+          <div style="font-size:11.5px;color:oklch(0.58 0.01 260);margin:0 0 12px;line-height:1.6;">計算 log 期間內同一個介面或對端由 Up 變 Down 的次數；同一次斷線出現好幾行（SNMP trap、aftd 等）只算一次。目前仍是 Down 的排在最前面。點一列可以查看相關 log。</div>
+          <sc-if value="{{hasFlaps}}" hint-placeholder-val="{{false}}">
+            <div style="overflow-x:auto;background:oklch(0.21 0.012 260);border:1px solid oklch(0.3 0.012 260);border-radius:8px;">
+              <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+                <thead>
+                  <tr style="text-align:left;color:oklch(0.6 0.01 260);">
+                    <th style="padding:8px 10px;">設備</th><th style="padding:8px 10px;">介面 / 對端</th><th style="padding:8px 10px;">類型</th>
+                    <th style="padding:8px 10px;text-align:right;">Down 次數</th><th style="padding:8px 10px;">期間</th><th style="padding:8px 10px;">目前狀態</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <sc-for list="{{flapRows}}" as="f" hint-placeholder-count="5">
+                    <tr onClick="{{f.select}}" title="點一下查看這個介面的相關 log" style="border-top:1px solid oklch(0.27 0.012 260);cursor:pointer;">
+                      <td style="padding:7px 10px;font-weight:600;white-space:nowrap;">{{f.hostname}}</td>
+                      <td style="padding:7px 10px;white-space:nowrap;font-family:ui-monospace,Menlo,Consolas,monospace;color:oklch(0.9 0.006 260);">{{f.label}}</td>
+                      <td style="padding:7px 10px;color:oklch(0.65 0.01 260);white-space:nowrap;">{{f.kind}}</td>
+                      <td style="padding:7px 10px;text-align:right;font-weight:700;color:oklch(0.78 0.15 95);font-variant-numeric:tabular-nums;">{{f.downs}}</td>
+                      <td style="padding:7px 10px;white-space:nowrap;color:oklch(0.75 0.01 260);font-variant-numeric:tabular-nums;">{{f.range}}</td>
+                      <td style="padding:7px 10px;white-space:nowrap;font-weight:700;color:{{f.statusColor}};">{{f.statusText}}</td>
+                    </tr>
+                  </sc-for>
+                </tbody>
+              </table>
+            </div>
+          </sc-if>
+          <sc-if value="{{noFlaps}}" hint-placeholder-val="{{false}}">
+            <div style="padding:16px;font-size:12.5px;color:oklch(0.55 0.01 260);">沒有介面狂跳。</div>
+          </sc-if>
         </sc-if>
 
         <sc-if value="{{isCpuMem}}" hint-placeholder-val="{{false}}">
@@ -718,6 +788,50 @@ function dailyListFromRows(rows){
 // 比對用：去掉 RE0/RE1/node0/node1 後綴、去掉數字前導 0（ABC.RTR001 = ABC.RTR1）、不分大小寫
 function dailyBase(h){ return String(h || '').trim().replace(/[._\-](re\d|node\d)$/i, '').toLowerCase().replace(/(^|[^\d])0+(?=\d)/g, '$1'); }
 function rocDate(d){ const p = n => String(n).padStart(2, '0'); return String(d.getFullYear() - 1911) + p(d.getMonth() + 1) + p(d.getDate()); }
+// ===== 介面狂跳：同一個介面 / 對端由 Up 變 Down 達 FLAP_MIN 次 =====
+const FLAP_MIN = 3;
+function flapKind(id){
+  const k = String(id).split(':')[0];
+  return k === 'if' ? '介面' : k === 'ip' ? '對端 IP（BFD/BGP）' : k === 'session' ? 'Session' : (k === 'slot' || k === 'fpc') ? 'FPC/PIC' : k;
+}
+function computeFlaps(duTracker){
+  const trackers = Object.values(duTracker || {});
+  // BFD trap 會寫「interface: xe-1/0/0.100, peer addr: 192.0.2.1」，用來把對端 IP 對到介面
+  const peerIf = {};
+  trackers.forEach(t => t.changes.forEach(c => {
+    const m = c.raw.match(/interface:\s*([\w\-\/:.]+?),\s*peer addr:\s*([\d.]+)/i);
+    if (m) peerIf[t.hostname + '|' + m[2]] = m[1];
+  }));
+  const out = [];
+  trackers.forEach(t => {
+    const ch = t.changes.slice().sort((a, b) => a.date - b.date);
+    let prevState = null, downs = 0, first = null, lastDown = null;
+    ch.forEach(c => {
+      // 「Up -> Down」本身就代表先前是 Up（BFD 只記 Down 不記 Up），每一行都算一次斷線
+      const arrow = /\bup\s*->\s*down\b/i.test(c.raw);
+      if (c.state === 'down' && (prevState !== 'down' || arrow)) { downs++; if (!first) first = c.date; lastDown = c.date; }
+      prevState = c.state;
+    });
+    if (downs < FLAP_MIN) return;
+    const id = String(t.identifier), value = id.replace(/^[a-z]+:/, '');
+    const hasUp = ch.some(c => c.state === 'up');
+    let kind = flapKind(id), label = value;
+    if (id.startsWith('ip:')) {
+      const sample = ch.map(c => c.raw).join(' ');
+      kind = /bfd/i.test(sample) ? 'BFD 對端' : /bgp/i.test(sample) ? 'BGP 對端' : kind;
+      const ifn = peerIf[t.hostname + '|' + value];
+      if (ifn) label = value + '（' + ifn + '）';
+    }
+    out.push({ hostname: t.hostname, identifier: id, label, search: value, kind, downs, first, last: ch[ch.length - 1].date, lastDown,
+      stillDown: hasUp && prevState === 'down', unknown: !hasUp });
+  });
+  // 實體介面已經在清單裡時，不再重複列它的邏輯介面（xe-1/0/0 與 xe-1/0/0.0）
+  const phys = new Set(out.filter(f => f.identifier.startsWith('if:') && !/\.\d+$/.test(f.search)).map(f => f.hostname + '|' + f.search.toLowerCase()));
+  return out
+    .filter(f => !(f.identifier.startsWith('if:') && /\.\d+$/.test(f.search) && phys.has(f.hostname + '|' + f.search.toLowerCase().replace(/\.\d+$/, ''))))
+    .sort((a, b) => (b.stillDown - a.stillDown) || (b.downs - a.downs) || (b.last - a.last));
+}
+
 function physIf(id){ return String(id).replace(/^if:/, '').replace(/\.\d+$/, ''); }
 
 // ===== 匯出 .xlsx（不需外部套件：自己組 Office Open XML + ZIP）=====
@@ -1027,7 +1141,7 @@ class Component extends DCLogic {
   // 只解析「新加入」的檔案，合併到已經解析好的結果（不再每次全部重來）
   processFiles = async (results) => {
     const st = this.state;
-    const prev = (st.rawFiles || []).length ? { groups: st.groups, devices: st.devices, dayCounts: st.dayCounts, moduleCounts: st.moduleCounts, severityTotals: st.severityTotals, totalEntries: st.totalEntries, totalLines: st.totalLines, duTracker: st.duTracker } : null;
+    const prev = (st.rawFiles || []).length ? { groups: st.groups, devices: st.devices, dayCounts: st.dayCounts, moduleCounts: st.moduleCounts, severityTotals: st.severityTotals, totalEntries: st.totalEntries, totalLines: st.totalLines, duTracker: st.duTracker, lineMax: st.lineMax } : null;
     const parsed = await this.parseAll(results, prev, (p) => this.setState({ progress: p }));
     // 只保留檔名與大小，不把整份檔案內容留在記憶體
     const rawFiles = [...(st.rawFiles || []), ...results.map(r => ({ name: r.name, size: r.text.length }))];
@@ -1035,13 +1149,16 @@ class Component extends DCLogic {
   };
 
   resetAll = () => {
-    this.setState({ rawFiles: [], loading: false, groups: {}, devices: {}, dayCounts: {}, moduleCounts: {}, severityTotals: {}, totalEntries: 0, totalLines: 0, downUpEvents: [], duTracker: {}, view: { kind: 'dashboard' }, selectedKey: null, searchQuery: '', listLimit: LIST_PAGE });
+    this.setState({ rawFiles: [], loading: false, groups: {}, devices: {}, dayCounts: {}, moduleCounts: {}, severityTotals: {}, totalEntries: 0, totalLines: 0, downUpEvents: [], duTracker: {}, lineMax: null, view: { kind: 'dashboard' }, selectedKey: null, searchQuery: '', listLimit: LIST_PAGE });
   };
 
   parseAll = async (rawFiles, prev, onProgress) => {
     const groups = prev ? prev.groups : {}, devices = prev ? prev.devices : {}, dayCounts = prev ? prev.dayCounts : {}, moduleCounts = prev ? prev.moduleCounts : {};
     const severityTotals = prev ? prev.severityTotals : { critical:0, error:0, warning:0, notice:0 };
     const duTracker = prev ? (prev.duTracker || {}) : {};
+    // 同一台設備若連續跑兩次 show log messages，同一行 log 會出現兩次：
+    // 每段指令輸出各自計數，只有「比之前任何一段出現更多次」的那幾行才算新的（避免次數加倍）
+    const lineMax = (prev && prev.lineMax) || new Map();
     let totalEntries = prev ? prev.totalEntries : 0, totalLines = prev ? prev.totalLines : 0;
     const totalChars = Math.max(1, rawFiles.reduce((s, f) => s + f.text.length, 0));
     let doneChars = 0, sinceYield = 0, lastYield = Date.now();
@@ -1087,6 +1204,7 @@ class Component extends DCLogic {
     for (const file of rawFiles) {
       const lines = file.text.split(/\r?\n/);
       let currentHost = null, currentVersion = null, mode = null, buffer = [], bufferHost = null;
+      let blockCounts = new Map();
       for (const line of lines) {
         totalLines++;
         doneChars += line.length + 1;
@@ -1100,7 +1218,7 @@ class Component extends DCLogic {
           }
         }
         const pm = line.match(rePrompt);
-        if (pm) currentHost = pm[1];
+        if (pm) { currentHost = pm[1]; blockCounts = new Map(); }
         const vm = line.match(/---\s*JUNOS\s+(\S+)/);
         if (vm) currentVersion = vm[1];
 
@@ -1136,6 +1254,10 @@ class Component extends DCLogic {
           }
         }
         if (!entry) continue;
+        const bc = (blockCounts.get(entry.raw) || 0) + 1;
+        blockCounts.set(entry.raw, bc);
+        if (bc <= (lineMax.get(entry.raw) || 0)) continue;   // 前一段輸出已經算過這一行
+        lineMax.set(entry.raw, bc);
 
         entry.date = parseTs(entry.ts);
         entry.module = classifyModule(entry);
@@ -1204,7 +1326,7 @@ class Component extends DCLogic {
     });
     downUpEvents.sort((a, b) => (a.recovered === b.recovered ? (b.downLast - a.downLast) : (a.recovered ? 1 : -1)));
 
-    return { groups: { ...groups }, devices: { ...devices }, dayCounts: { ...dayCounts }, moduleCounts: { ...moduleCounts }, severityTotals: { ...severityTotals }, totalEntries, totalLines, downUpEvents, duTracker };
+    return { groups: { ...groups }, devices: { ...devices }, dayCounts: { ...dayCounts }, moduleCounts: { ...moduleCounts }, severityTotals: { ...severityTotals }, totalEntries, totalLines, downUpEvents, duTracker, lineMax };
   };
 
   onSearchChange = (e) => { this.setState({ searchQuery: e.target.value, listLimit: LIST_PAGE }); };
@@ -1212,6 +1334,7 @@ class Component extends DCLogic {
   selectDevices = () => { this.setState({ view: { kind: 'devices' }, selectedKey: null, searchQuery: '', listLimit: LIST_PAGE }); };
   selectAlertError = () => { this.setState({ view: { kind: 'severity', severities: [0, 1, 2, 3] }, selectedKey: null, searchQuery: '', listLimit: LIST_PAGE }); };
   selectCpuMem = () => { this.setState({ view: { kind: 'cpumem' }, selectedKey: null, searchQuery: '', listLimit: LIST_PAGE }); };
+  selectFlap = () => { this.setState({ view: { kind: 'flap' }, selectedKey: null, searchQuery: '', listLimit: LIST_PAGE }); };
   toggleLowPriority = () => { this.setState(s => ({ showLowPriority: !s.showLowPriority })); };
   toggleCmOnlyOver = () => { this.setState(s => ({ cmOnlyOver: !s.cmOnlyOver })); };
   selectUrgent = () => { this.setState({ view: { kind: 'urgent' }, selectedKey: null, searchQuery: '', listLimit: LIST_PAGE }); };
@@ -1313,7 +1436,10 @@ class Component extends DCLogic {
     const byBase = {};
     Object.values(st.devices || {}).forEach(d => { const b = dailyBase(d.hostname); (byBase[b] = byBase[b] || []).push(d); });
     const duByBase = {};
-    (st.downUpEvents || []).forEach(e => { if (!String(e.identifier).startsWith('if:')) return; const b = dailyBase(e.hostname); (duByBase[b] = duByBase[b] || []).push(e); });
+    // BFD 只記 Down 不記 Up，不能拿來判斷介面有沒有恢復；BFD 另外用狂跳清單處理
+    (st.downUpEvents || []).forEach(e => { if (!String(e.identifier).startsWith('if:') || /bfd/i.test(e.downSample || '')) return; const b = dailyBase(e.hostname); (duByBase[b] = duByBase[b] || []).push(e); });
+    const bfdByBase = {};
+    computeFlaps(st.duTracker).filter(f => f.kind === 'BFD 對端').forEach(f => { const b = dailyBase(f.hostname); (bfdByBase[b] = bfdByBase[b] || []).push(f); });
 
     const maxOf = arr => { const v = arr.filter(x => x !== null && x !== undefined && isFinite(x)); return v.length ? Math.round(Math.max(...v)) : null; };
     const pctNum = s => { const n = parseInt(s, 10); return isFinite(n) ? n : null; };
@@ -1359,12 +1485,18 @@ class Component extends DCLogic {
           notify.push([name, ifn, fmtDT(t)]);
           down = true;
         } else {
-          const n = evs.reduce((s, e) => s + e.downCount, 0);
+          // 斷線次數：每個 down→up 算一次；同一實體介面的邏輯單元（.0）取最大值，不重複相加
+          const perId = {}; evs.forEach(e => { perId[e.identifier] = (perId[e.identifier] || 0) + 1; });
+          const n = Math.max(...Object.values(perId));
           const endAt = evs[evs.length - 1].upAt, startAt = evs[0].downFirst;
           const end = endAt && startAt && endAt.toDateString() === startAt.toDateString() ? fmtDT(endAt).slice(-5) : fmtDT(endAt);
           if (n >= 3) items.push(ifn + ' flapping (' + fmtDT(startAt) + '~' + end + ')');
           else items.push(ifn + '\t瞬斷，已恢復');
         }
+      });
+      (bfdByBase[b] || []).forEach(f => {
+        const end = f.first && f.last && f.first.toDateString() === f.last.toDateString() ? fmtDT(f.last).slice(-5) : fmtDT(f.last);
+        items.push('BFD ' + f.label.replace('（', ' (').replace('）', ')') + ' flapping (' + fmtDT(f.first) + '~' + end + ')');   // 不標黃
       });
       if (down) yellow.add(rows.length);
       rows.push([name, ver, model, mem === null ? '無資料' : mem / 100, cpu === null ? '無資料' : cpu / 100, items.length ? items.join('\n') : 'Normal', inspector]);
@@ -1404,7 +1536,18 @@ class Component extends DCLogic {
     const isDevices = view.kind === 'devices' && !isSearching;
     const isCpuMem = view.kind === 'cpumem' && !isSearching;
     const isSeenView = view.kind === 'seen' && !isSearching;
-    const isListView = !isDashboard && !isDevices && !isCpuMem && !isSeenView;
+    const isFlap = view.kind === 'flap' && !isSearching;
+    const isListView = !isDashboard && !isDevices && !isCpuMem && !isSeenView && !isFlap;
+    // 介面狂跳
+    const flaps = computeFlaps(st.duTracker);
+    const flapStillDownCount = flaps.filter(f => f.stillDown).length;
+    const flapRows = flaps.map(f => ({
+      hostname: f.hostname, label: f.label, kind: f.kind, downs: f.downs,
+      range: fmtDT(f.first) + ' ~ ' + fmtDT(f.last),
+      statusText: f.stillDown ? '✖ 目前 Down' : f.unknown ? '？log 沒記錄 Up' : '✔ 已恢復 Up',
+      statusColor: f.stillDown ? 'oklch(0.72 0.19 25)' : f.unknown ? 'oklch(0.65 0.01 260)' : 'oklch(0.72 0.15 150)',
+      select: () => this.setState({ searchQuery: f.search, selectedKey: null, listLimit: LIST_PAGE }),
+    }));
     const seen = st.seen || {};
     const notSeen = (g) => g.key === st.selectedKey || !isSeenGroup(g, seen);
 
@@ -1597,6 +1740,11 @@ class Component extends DCLogic {
       statChips, summaryCards,
       dashboardTrend, dashboardModuleDist, topRecurring,
       cpuTop, memTop,
+      isFlap, flapRows, flapTop: flapRows.slice(0, 6), flapCount: flaps.length, flapMin: FLAP_MIN,
+      hasFlaps: flaps.length > 0, noFlaps: flaps.length === 0,
+      flapStillDownCount, hasFlapStillDown: flapStillDownCount > 0, selectFlap: this.selectFlap,
+      flapNavStyle: 'padding:9px 10px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:700;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;gap:6px;color:oklch(0.85 0.13 95);border:1px solid oklch(0.78 0.15 95 / 0.45);background:' + (isFlap ? 'oklch(0.78 0.15 95 / 0.22)' : 'oklch(0.78 0.15 95 / 0.08)') + ';',
+      flapBadgeStyle: 'font-size:11.5px;font-weight:700;padding:1px 8px;border-radius:10px;background:' + (flaps.length ? 'oklch(0.78 0.15 95 / 0.3)' : 'oklch(0.3 0.012 260)') + ';color:' + (flaps.length ? 'oklch(0.9 0.12 95)' : 'oklch(0.6 0.01 260)') + ';',
       isCpuMem, cpuMemRows, cpuMemOverCount, hasCpuMemRows: cpuMemRows.length > 0, noCpuMemRows: cpuMemRows.length === 0,
       selectCpuMem: this.selectCpuMem, toggleCmOnlyOver: this.toggleCmOnlyOver,
       cmOnlyOverLabel: cmOnlyOver ? '✓ 只看超標' : '只看超標',
