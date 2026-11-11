@@ -1623,7 +1623,7 @@ class Component extends DCLogic {
         else if ((m = text.match(/(?:Memory|usage|Utilization)[^\d\n]*?(\d+(?:\.\d+)?)\s*%/i))) devices[host].memUsage = Math.round(Number(m[1])) + '%';   // 白牌
       } else if (mode === 'over') {
         let m;
-        if ((m = text.match(/ACOS\)? version\s+(\S+)/i))) devices[host].version = m[1];                                    // A10
+        if ((m = text.match(/ACOS\)? version\s+([^\s,]+)/i))) devices[host].version = m[1];                                    // A10
         else if ((m = text.match(/L2\/L3 Version\/Revision\s*:\s*([\d.]+)/i))) devices[host].version = m[1];           // PICOS
         else if ((m = text.match(/Junos:\s*(\S+)/i))) devices[host].version = m[1];
       } else if (mode === 'alarms') {
@@ -1665,7 +1665,7 @@ class Component extends DCLogic {
         if (/show version\s*(\|\s*no-more)?\s*$/.test(line.trim()) && pm) { if (mode) finalizeDeviceBlock(mode, bufferHost, currentVersion, buffer); mode = 'over'; buffer = []; bufferHost = currentHost; continue; }
 
         if (mode) {
-          if ((line.trim() === '' && buffer.length > 0) || (pm && buffer.length > 0)) {
+          if ((line.trim() === '' && buffer.length > 0 && mode !== 'over') || (pm && buffer.length > 0)) {   // show version 中間有空白行，讀到下一個提示字元才結束
             finalizeDeviceBlock(mode, bufferHost, currentVersion, buffer);
             mode = null; buffer = [];
             if (line.trim() === '') continue;
@@ -1996,10 +1996,12 @@ class Component extends DCLogic {
     };
 
     const entries = [];
-    // 只判讀「前一天檢查人員是我」的設備（例如 Allot 是 Jack、WVPN 是 Max 負責，就不列）
+    // 只判讀「前一天檢查人員是我」的設備（其他人負責的設備不列）
     let meName = ''; try { meName = (localStorage.getItem('jla_daily_inspector') || '').trim(); } catch {}
     const me = meName.toLowerCase();
-    const isMine = (row) => !me || !row[5] || String(row[5]).trim().toLowerCase() === me;
+    // 只判讀這三個區塊（WVPN-Brocade、Allot 由其他人負責）
+    const MY_SECTIONS = ['f1', 'a10', 'tapping'];
+    const isMine = (row) => MY_SECTIONS.includes(String(sectionOf(row)).trim().toLowerCase()) && (!me || !row[5] || String(row[5]).trim().toLowerCase() === me);
     const others = cfg.list.filter(r => !isMine(r));
     cfg.list.filter(isMine).forEach((row) => {
       const [name, ver0, model0] = row, section = sectionOf(row), prevText = row[4] || '';
@@ -2434,7 +2436,7 @@ class Component extends DCLogic {
       urgentCount: triWriteTotal,
       isFill, fillRows, fillCount: fillEntries.length, fillAbnormalCount: fillEntries.filter(e => e.items.length).length,
       fillNewCount, fillContCount, fillResolvedCount, fillOldList: !!daily.oldList,
-      fillOwnerNote: !daily.hasList ? '' : !daily.me ? '還沒設定檢查人員：按一次「Daily Check 匯出」填名字後，就只會列出你負責的設備。' : ('只列前一天檢查人員是「' + daily.me + '」的設備' + (daily.othersCount ? '；其他人負責的 ' + daily.othersCount + ' 台（' + daily.otherPeople.join('、') + '）不判讀' : '') + '。'),
+      fillOwnerNote: !daily.hasList ? '' : ('只判讀 F1、A10、Tapping' + (daily.me ? '，而且前一天檢查人員是「' + daily.me + '」的設備' : '') + (daily.othersCount ? '；其他 ' + daily.othersCount + ' 台' + (daily.otherPeople.filter(Boolean).length ? '（' + daily.otherPeople.filter(Boolean).join('、') + ' 負責）' : '') + '不判讀' : '') + '。'),
       summaryText: daily.summary || '', copySummary: () => this.copyText('__summary__', daily.summary || ''),
       summaryCopyLabel: st.copiedKey === '__summary__' ? '✓ 已複製' : '複製摘要', summaryCopyBg: st.copiedKey === '__summary__' ? 'oklch(0.72 0.15 150 / 0.25)' : 'oklch(0.68 0.14 235 / 0.15)',
       hasVerify: (daily.verify || []).length > 0, verifyCount: (daily.verify || []).length,
