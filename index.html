@@ -274,6 +274,10 @@
               </sc-if>
             </sc-if>
           </div>
+          <div style="font-size:12px;color:oklch(0.7 0.01 260);margin:0 0 10px;">{{fillOwnerNote}}</div>
+          <sc-if value="{{fillOldList}}" hint-placeholder-val="{{false}}">
+            <div style="padding:10px 12px;margin:0 0 12px;border-radius:6px;background:oklch(0.78 0.15 95 / 0.12);border:1px solid oklch(0.78 0.15 95 / 0.4);font-size:12.5px;color:oklch(0.88 0.1 95);">目前的 Daily 清單是舊格式，沒有「檢查人員」欄，所以全部設備都會列出。請重新按一次「設定 Daily 清單」匯入總表。</div>
+          </sc-if>
           <sc-if value="{{fillNoList}}" hint-placeholder-val="{{false}}">
             <div style="padding:10px 12px;margin:0 0 12px;border-radius:6px;background:oklch(0.78 0.15 95 / 0.12);border:1px solid oklch(0.78 0.15 95 / 0.4);font-size:12.5px;color:oklch(0.88 0.1 95);">還沒有 Daily 設備清單，所以每台都會顯示「總表找不到」。請先按上方「設定 Daily 清單」匯入 Daily check Excel。</div>
           </sc-if>
@@ -1038,7 +1042,7 @@ async function readXlsxRows(buf){
 }
 // 從 Daily check 表取出 F1 區塊（F1 那列之後，到下一個「QTY:」區塊或空白列為止）
 // 從 Daily check 總表取出所有區塊（F1 / WVPN-Brocade / Allot / A10 / Tapping…）
-// 每台：[名稱, 版本, 型號, 區塊, 前一天的 log Analysis]
+// 每台：[名稱, 版本, 型號, 區塊, 前一天的 log Analysis, 前一天的檢查人員]
 function dailyListFromRows(rows){
   const list = []; let section = '';
   const hasQty = rows.some(r => /^QTY/i.test(String((r || [])[1] || '').trim()));
@@ -1048,7 +1052,7 @@ function dailyListFromRows(rows){
     if (/^QTY/i.test(String(r[1] || '').trim())) { section = name; continue; }
     if (!hasQty) { if (/^(version|設備)/i.test(String(r[1] || '') + name)) continue; }
     else if (!section) continue;
-    list.push([name, String(r[1] || '').trim(), String(r[2] || '').trim(), section || 'F1', String(r[8] || '').trim()]);
+    list.push([name, String(r[1] || '').trim(), String(r[2] || '').trim(), section || 'F1', String(r[8] || '').trim(), String(r[9] || '').trim()]);
   }
   return list;
 }
@@ -1992,7 +1996,12 @@ class Component extends DCLogic {
     };
 
     const entries = [];
-    cfg.list.forEach((row) => {
+    // 只判讀「前一天檢查人員是我」的設備（例如 Allot 是 Jack、WVPN 是 Max 負責，就不列）
+    let meName = ''; try { meName = (localStorage.getItem('jla_daily_inspector') || '').trim(); } catch {}
+    const me = meName.toLowerCase();
+    const isMine = (row) => !me || !row[5] || String(row[5]).trim().toLowerCase() === me;
+    const others = cfg.list.filter(r => !isMine(r));
+    cfg.list.filter(isMine).forEach((row) => {
       const [name, ver0, model0] = row, section = sectionOf(row), prevText = row[4] || '';
       const b = dailyBase(name);
       const e = one(name, ver0, model0, b, true, section, prevText);
@@ -2063,7 +2072,9 @@ class Component extends DCLogic {
     if (resolvedAll.length) sumLines.push('已解除 ' + resolvedAll.length + ' 筆：' + resolvedAll.join('；'));
     const missing = entries.filter(e => e.inList && !e.hasData && (e.section || 'F1') === 'F1');
     if (missing.length) sumLines.push('F1 缺資料 ' + missing.length + ' 台（log 裡沒有這些設備）' + (missing.length <= 6 ? '：' + missing.map(e => e.name).join('、') : ''));
-    return { entries, notes, notify, verify, summary: sumLines.join('\n'), hasList: cfg.list.length > 0 };
+    const otherPeople = [...new Set(others.map(r => r[5]))];
+    return { entries, notes, notify, verify, summary: sumLines.join('\n'), hasList: cfg.list.length > 0, me: meName, othersCount: others.length, otherPeople,
+      oldList: cfg.list.length > 0 && cfg.list.every(r => r.length < 6) };
   };
 
   exportDailyCheck = () => {
@@ -2422,7 +2433,8 @@ class Component extends DCLogic {
       selectUrgent: this.selectUrgent,
       urgentCount: triWriteTotal,
       isFill, fillRows, fillCount: fillEntries.length, fillAbnormalCount: fillEntries.filter(e => e.items.length).length,
-      fillNewCount, fillContCount, fillResolvedCount,
+      fillNewCount, fillContCount, fillResolvedCount, fillOldList: !!daily.oldList,
+      fillOwnerNote: !daily.hasList ? '' : !daily.me ? '還沒設定檢查人員：按一次「Daily Check 匯出」填名字後，就只會列出你負責的設備。' : ('只列前一天檢查人員是「' + daily.me + '」的設備' + (daily.othersCount ? '；其他人負責的 ' + daily.othersCount + ' 台（' + daily.otherPeople.join('、') + '）不判讀' : '') + '。'),
       summaryText: daily.summary || '', copySummary: () => this.copyText('__summary__', daily.summary || ''),
       summaryCopyLabel: st.copiedKey === '__summary__' ? '✓ 已複製' : '複製摘要', summaryCopyBg: st.copiedKey === '__summary__' ? 'oklch(0.72 0.15 150 / 0.25)' : 'oklch(0.68 0.14 235 / 0.15)',
       hasVerify: (daily.verify || []).length > 0, verifyCount: (daily.verify || []).length,
