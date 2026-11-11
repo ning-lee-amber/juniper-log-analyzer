@@ -340,7 +340,7 @@
 
           <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;font-size:13.5px;font-weight:700;margin:18px 0 6px;background:oklch(0.62 0.21 25 / 0.14);border:1px solid oklch(0.62 0.21 25 / 0.45);color:oklch(0.85 0.14 25);">✍ 要寫 Daily（{{triWriteTotal}}）</div>
           <sc-for list="{{triEvents}}" as="ev" hint-placeholder-count="3">
-            <div onClick="{{ev.select}}" style="display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-bottom:1px solid oklch(0.25 0.012 260);cursor:pointer;">
+            <div onClick="{{ev.select}}" style="{{ev.rowStyle}}">
               <div style="width:4px;align-self:stretch;border-radius:2px;background:{{ev.color}};flex-shrink:0;"></div>
               <div style="flex:1;min-width:0;">
                 <div style="display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center;margin-bottom:3px;">
@@ -616,6 +616,31 @@
             <span style="font-size:13px;font-weight:700;">{{selectedGroup.hostname}}</span>
           </div>
           <div style="font-size:13px;line-height:1.6;color:oklch(0.88 0.006 260);margin-bottom:14px;padding:10px 12px;background:oklch(0.24 0.012 260);border-radius:6px;">{{selectedGroup.sample}}</div>
+          <sc-if value="{{selectedGroup.triWhy}}" hint-placeholder-val="{{false}}">
+            <div style="font-size:12px;margin-bottom:10px;color:oklch(0.8 0.006 260);">判讀：{{selectedGroup.triWhy}}</div>
+          </sc-if>
+          <sc-if value="{{selectedGroup.dbHas}}" hint-placeholder-val="{{false}}">
+            <div style="margin-bottom:14px;padding:10px 12px;border-radius:7px;background:oklch(0.62 0.21 25 / 0.1);border:1px solid oklch(0.62 0.21 25 / 0.4);">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                <div style="flex:1;font-size:12px;font-weight:700;color:oklch(0.85 0.14 25);">✍ 寫進 Daily：{{selectedGroup.dbName}}</div>
+                <button onClick="{{selectedGroup.dbCopy}}" style="background:oklch(0.68 0.14 235 / 0.2);border:1px solid oklch(0.68 0.14 235 / 0.6);color:oklch(0.88 0.08 235);padding:3px 10px;border-radius:6px;font-size:11.5px;cursor:pointer;flex-shrink:0;">{{selectedGroup.dbCopyLabel}}</button>
+              </div>
+              <sc-if value="{{selectedGroup.dbNormal}}" hint-placeholder-val="{{false}}"><div style="font-size:12.5px;color:oklch(0.7 0.01 260);">Normal</div></sc-if>
+              <sc-for list="{{selectedGroup.dbLines}}" as="dl" hint-placeholder-count="2">
+                <div style="display:flex;gap:8px;align-items:flex-start;padding:2px 0;">
+                  <div style="{{dl.lineStyle}}">{{dl.text}}</div>
+                  <span onClick="{{dl.copy}}" style="font-size:10.5px;padding:1px 7px;border-radius:9px;cursor:pointer;border:1px solid oklch(0.34 0.012 260);color:oklch(0.75 0.01 260);flex-shrink:0;">{{dl.copyLabel}}</span>
+                </div>
+              </sc-for>
+              <sc-if value="{{selectedGroup.dbHasHints}}" hint-placeholder-val="{{false}}">
+                <sc-for list="{{selectedGroup.dbHints}}" as="hn" hint-placeholder-count="1"><div style="font-size:11.5px;line-height:1.6;color:oklch(0.85 0.13 95);margin-top:4px;">{{hn.text}}（提示，不會寫進 Excel）</div></sc-for>
+              </sc-if>
+              <div style="font-size:10.5px;color:oklch(0.6 0.01 260);margin-top:6px;">{{selectedGroup.dbNote}}</div>
+            </div>
+          </sc-if>
+          <sc-if value="{{!selectedGroup.dbHas}}" hint-placeholder-val="{{false}}">
+            <div style="margin-bottom:14px;font-size:11.5px;color:oklch(0.6 0.01 260);">{{selectedGroup.dbNote}}</div>
+          </sc-if>
 
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;margin-bottom:16px;">
             <div><div style="color:oklch(0.55 0.01 260);">模組</div><div>{{selectedGroup.module}}</div></div>
@@ -708,7 +733,45 @@
             </sc-for>
           </div>
         </sc-if>
-        <sc-if value="{{!selectedGroup}}" hint-placeholder-val="{{true}}">
+        <sc-if value="{{hasTriSel}}" hint-placeholder-val="{{false}}">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+            <span style="font-size:11px;padding:2px 9px;border-radius:10px;background:{{triSel.badgeBg}};color:{{triSel.color}};font-weight:700;">{{triSel.badge}}</span>
+            <span style="font-size:13px;font-weight:700;">{{triSel.hosts}}</span>
+          </div>
+          <div style="font-size:13px;line-height:1.6;color:oklch(0.9 0.006 260);margin-bottom:6px;font-weight:600;">{{triSel.title}}</div>
+          <div style="font-size:11.5px;color:oklch(0.6 0.01 260);margin-bottom:12px;">{{triSel.sub}}</div>
+          <div style="font-size:12.5px;line-height:1.7;color:oklch(0.85 0.006 260);margin-bottom:12px;padding:10px 12px;background:oklch(0.24 0.012 260);border-radius:6px;">💡 {{triSel.why}}</div>
+          <sc-if value="{{triSel.hasNote}}" hint-placeholder-val="{{false}}">
+            <div style="font-size:12px;line-height:1.6;color:oklch(0.85 0.13 95);margin-bottom:12px;">{{triSel.note}}</div>
+          </sc-if>
+
+          <sc-for list="{{triSel.dbBoxes}}" as="bx" hint-placeholder-count="1">
+          <sc-if value="{{bx.dbHas}}" hint-placeholder-val="{{false}}">
+            <div style="margin-bottom:14px;padding:10px 12px;border-radius:7px;background:oklch(0.62 0.21 25 / 0.1);border:1px solid oklch(0.62 0.21 25 / 0.4);">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                <div style="flex:1;font-size:12px;font-weight:700;color:oklch(0.85 0.14 25);">✍ 寫進 Daily：{{bx.dbName}}</div>
+                <button onClick="{{bx.dbCopy}}" style="background:oklch(0.68 0.14 235 / 0.2);border:1px solid oklch(0.68 0.14 235 / 0.6);color:oklch(0.88 0.08 235);padding:3px 10px;border-radius:6px;font-size:11.5px;cursor:pointer;flex-shrink:0;">{{bx.dbCopyLabel}}</button>
+              </div>
+              <sc-if value="{{bx.dbNormal}}" hint-placeholder-val="{{false}}"><div style="font-size:12.5px;color:oklch(0.7 0.01 260);">Normal</div></sc-if>
+              <sc-for list="{{bx.dbLines}}" as="dl" hint-placeholder-count="2">
+                <div style="display:flex;gap:8px;align-items:flex-start;padding:2px 0;">
+                  <div style="{{dl.lineStyle}}">{{dl.text}}</div>
+                  <span onClick="{{dl.copy}}" style="font-size:10.5px;padding:1px 7px;border-radius:9px;cursor:pointer;border:1px solid oklch(0.34 0.012 260);color:oklch(0.75 0.01 260);flex-shrink:0;">{{dl.copyLabel}}</span>
+                </div>
+              </sc-for>
+              <sc-if value="{{bx.dbHasHints}}" hint-placeholder-val="{{false}}">
+                <sc-for list="{{bx.dbHints}}" as="hn" hint-placeholder-count="1"><div style="font-size:11.5px;line-height:1.6;color:oklch(0.85 0.13 95);margin-top:4px;">{{hn.text}}（提示，不會寫進 Excel）</div></sc-for>
+              </sc-if>
+              <div style="font-size:10.5px;color:oklch(0.6 0.01 260);margin-top:6px;">{{bx.dbNote}}</div>
+            </div>
+          </sc-if>
+          <sc-if value="{{!bx.dbHas}}" hint-placeholder-val="{{false}}">
+            <div style="margin-bottom:14px;font-size:11.5px;color:oklch(0.6 0.01 260);">{{bx.dbNote}}</div>
+          </sc-if>
+          </sc-for>
+          <button onClick="{{triSel.searchLog}}" style="background:oklch(0.24 0.012 260);border:1px solid oklch(0.34 0.012 260);color:oklch(0.88 0.006 260);padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;">🔍 看相關的原始 log</button>
+        </sc-if>
+        <sc-if value="{{noDetail}}" hint-placeholder-val="{{true}}">
           <div style="height:100%;display:flex;align-items:center;justify-content:center;text-align:center;color:oklch(0.5 0.01 260);font-size:12.5px;padding:20px;">點選左側清單中的項目以查看詳情</div>
         </sc-if>
       </div>
@@ -2221,13 +2284,17 @@ class Component extends DCLogic {
         const ifn = String(e.identifier).replace(/^if:/, '');
         return { hosts: e.hostname, badge: '✖ 未恢復 → 需通知客戶', color: 'oklch(0.75 0.18 25)', badgeBg: 'oklch(0.62 0.21 25 / 0.22)',
           title: ifn + ' down', sub: '最後一次 Down：' + fmtDT(e.downLast) + '，之後沒有 Up', note: '',
-          select: () => this.setState({ searchQuery: ifn, selectedKey: null, listLimit: LIST_PAGE }) };
+          key: 'down|' + e.hostname + '|' + ifn, needles: [ifn],
+          why: '這個介面最後一次是 Down，到收 log 為止都沒有再 Up，代表目前仍斷線。要寫進 Daily，並通知客戶。',
+          search: ifn };
       }),
       // 對端（BFD/BGP）每個一列
       ...flaps.filter(f => /對端/.test(f.kind)).map(f => ({ hosts: f.hostname, badge: '🔁 狂跳 ' + f.downs + ' 次', color: 'oklch(0.85 0.13 95)', badgeBg: 'oklch(0.78 0.15 95 / 0.18)',
         title: f.kind.replace(' 對端', '') + ' ' + f.label + ' flapping',
         sub: fmtDT(f.first) + ' ~ ' + fmtDT(f.last) + '　' + (f.stillDown ? '目前仍是 Down' : f.unknown ? 'log 沒有記錄 Up' : '已恢復 Up'), note: f.note || '',
-        select: () => this.setState({ searchQuery: f.search, selectedKey: null, listLimit: LIST_PAGE }) })),
+        key: 'peer|' + f.hostname + '|' + f.label, needles: [f.label],
+        why: '同一個 ' + f.kind.replace(' 對端', '') + ' 對端在這段時間內反覆 Down / Up ' + f.downs + ' 次，代表鏈路不穩定（flapping）。要寫進 Daily' + (f.stillDown ? '；目前仍是 Down，需通知客戶。' : '。'),
+        search: f.search })),
       // 介面：同一台設備合併成一列
       ...(() => {
         const byHost = {};
@@ -2239,10 +2306,16 @@ class Component extends DCLogic {
           return { hosts: host, badge: '🔁 ' + fs.length + ' 個介面狂跳', color: 'oklch(0.85 0.13 95)', badgeBg: 'oklch(0.78 0.15 95 / 0.18)',
             title: fs.map(f => f.label + '（' + f.downs + '）').join('、'),
             sub: fmtDT(first) + ' ~ ' + fmtDT(last) + '　' + (still ? still + ' 個目前仍是 Down' : '全部已恢復 Up') + '　（括號內是 Down 次數）',
-            note: maintFor(host, first, last), select: () => this.setState({ searchQuery: host, selectedKey: null, listLimit: LIST_PAGE }) };
+            note: maintFor(host, first, last), key: 'if|' + host, needles: fs.map(f => f.label),
+            why: '這些介面在這段時間內反覆 Down / Up（括號內是 Down 次數），代表介面不穩定（flapping）。要寫進 Daily' + (still ? '；有 ' + still + ' 個目前仍是 Down，需通知客戶。' : '。'),
+            search: host };
         }).sort((a, b) => b.title.length - a.title.length);
       })(),
     ];
+    triEvents.forEach(ev => {
+      ev.select = () => this.setState({ triSel: { key: ev.key, hosts: ev.hosts, badge: ev.badge, color: ev.color, badgeBg: ev.badgeBg, title: ev.title, sub: ev.sub, note: ev.note, why: ev.why, needles: ev.needles, search: ev.search }, selectedKey: null });
+      ev.rowStyle = 'display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-bottom:1px solid oklch(0.25 0.012 260);cursor:pointer;background:' + (st.triSel && st.triSel.key === ev.key && !st.selectedKey ? 'oklch(0.26 0.02 235)' : 'transparent') + ';';
+    });
     const triWriteTotal = triEvents.length + triWrite.length;
     // 填表模式（只在需要時計算）
     const daily = (isFill || hasData) ? this.computeDaily(st) : { entries: [], hasList: false };
@@ -2437,9 +2510,34 @@ class Component extends DCLogic {
 
     const selectedGroupRaw = st.selectedKey ? groupsObj[st.selectedKey] : null;
     const selectedGroup = selectedGroupRaw ? decorateDetail(selectedGroupRaw) : null;
+    // 右側「寫進 Daily」：這台設備在 Daily 的 log Analysis 文字（可複製），跟這個事件有關的那行標出來
+    const dailyBox = (host, needles) => {
+      const e = (daily.entries || []).find(x => dailyBase(x.name) === dailyBase(host));
+      if (!e) return { dbHas: false, dbNote: (daily.entries || []).length ? '這台不在你要判讀的 Daily 清單裡（只判讀 F1、A10、Tapping），不用寫。' : '還沒有 Daily 清單，請先按「設定 Daily 清單」匯入總表，才能產生要寫的文字。' };
+      const nd = (needles || []).flatMap(x => String(x || '').split(/[（）()、,\s]+/)).filter(x => x.length >= 4).map(x => x.toLowerCase());
+      const lines = e.items.map((t, i) => {
+        const hit = nd.some(n => t.toLowerCase().includes(n));
+        const k = 'db|' + e.name + '|' + i;
+        return { text: t, hit, lineStyle: 'flex:1;font-size:12.5px;line-height:1.6;' + (hit ? 'color:oklch(0.92 0.1 25);font-weight:700;' : 'color:oklch(0.8 0.006 260);'),
+          copy: () => this.copyText(k, t), copyLabel: st.copiedKey === k ? '✓' : '複製' };
+      });
+      const text = e.items.length ? e.items.join('\n') : 'Normal';
+      const k = 'db|' + e.name;
+      const hints = (e.hints || []).map(t => ({ text: t }));
+      return { dbHas: true, dbName: e.name, dbLines: lines, dbHints: hints, dbHasHints: hints.length > 0, dbText: text, dbNormal: !e.items.length,
+        dbCopy: () => this.copyText(k, text), dbCopyLabel: st.copiedKey === k ? '✓ 已複製' : '複製整格',
+        dbNote: lines.some(l => l.hit) ? '紅字是這個事件那一行；「複製整格」= 這台 log Analysis 欄要貼的全部內容。' : '「複製整格」= 這台 log Analysis 欄要貼的全部內容。' };
+    };
+    if (selectedGroup) {
+      const t = triageOf(selectedGroupRaw);
+      Object.assign(selectedGroup, { triWhy: t ? ({ write: '✍ 要寫 Daily', look: '👀 要看一下', noise: '🔇 已知雜訊' }[t.zone] + '：' + t.why) : '' },
+        dailyBox(selectedGroupRaw.hostname, [selectedGroupRaw.iface, selectedGroupRaw.ip, t && t.zone === 'write' ? hwText(selectedGroupRaw).text.replace(/\s*\(.*$/, '') : ''] ));
+    }
+    const triSel = !selectedGroup && st.triSel ? { ...st.triSel, hasNote: !!st.triSel.note, dbBoxes: String(st.triSel.hosts).split('、').map(h => dailyBox(h, st.triSel.needles)),
+      searchLog: () => this.setState({ searchQuery: st.triSel.search, selectedKey: null, listLimit: LIST_PAGE }) } : null;
 
     return {
-      hasData, loading: st.loading,
+      hasData, loading: st.loading, triSel, hasTriSel: !!triSel, noDetail: !selectedGroup && !triSel,
       progressText: st.loading && st.progress ? (st.progress + '%') : '',
       visibleTotal, moreCount, hasMore: moreCount > 0,
       showMore: () => this.setState(s => ({ listLimit: (s.listLimit || LIST_PAGE) + LIST_PAGE })),
