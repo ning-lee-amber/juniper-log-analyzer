@@ -119,7 +119,7 @@ class Device:
         self.mem_other = None
 
 
-def parse_logs(paths, year):
+def parse_logs(paths, year, report_month=12):
     devices = {}
     # 同一台設備若連續跑兩次 show log messages，同一行會出現兩次：
     # 每段指令輸出各自計數，只有比之前任何一段出現更多次的那幾行才算新的
@@ -213,7 +213,10 @@ def parse_logs(paths, year):
             line_max[raw] = block[raw]
             msg = m.group(7)
             try:
-                t = dt.datetime(year, MONTHS[m.group(1)], int(m.group(2)), int(m.group(3)), int(m.group(4)), int(m.group(5)))
+                mon = MONTHS[m.group(1)]
+                # syslog 沒有年份：1 月收的 log 裡若有 12 月的日期（例如星期一抓到上週五），那是去年
+                y = year - 1 if mon > report_month + 1 else year
+                t = dt.datetime(y, mon, int(m.group(2)), int(m.group(3)), int(m.group(4)), int(m.group(5)))
             except (KeyError, ValueError):
                 continue
             if not HW_NOISE.search(msg):
@@ -418,7 +421,7 @@ def run(workbook, logs, template=None, date=None, inspector=None, replace_name=N
     for p in xlsx:
         devices.update(read_export(p, day.year))
     if raw:
-        devices.update(parse_logs(raw, day.year))
+        devices.update(parse_logs(raw, day.year, day.month))
     ignore = {base_name(x) for x in a.ignore.split(',') if x.strip()}
 
     # 找出 F1 區塊（F1 那列之後，到下一個「QTY:」區塊為止）

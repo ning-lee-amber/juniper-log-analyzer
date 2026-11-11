@@ -1799,7 +1799,9 @@ class Component extends DCLogic {
     const cur = collectRange(this.state.devices).start;
     if (!cur) { window.alert('log 裡找不到收 log 的時間（需要 show chassis routing-engine 的 Start time 和 Uptime）。'); return; }
     const prevs = loadCollectHist().filter(x => x < cur - 2 * 3600000);
-    const v = prevs.length ? prevs[prevs.length - 1] : cur - 24 * 3600000;
+    // 沒有紀錄時推算：星期一收的 log 包含五六日，所以往前推到星期五；其他天往前 24 小時
+    const back = new Date(cur).getDay() === 1 ? 3 : 1;
+    const v = prevs.length ? prevs[prevs.length - 1] : cur - back * 24 * 3600000;
     saveSince(v); this.setState({ since: v, sinceSource: prevs.length ? 'hist' : 'guess', listLimit: LIST_PAGE });
   };
   clearSince = () => { saveSince(null); this.setState({ since: null, sinceSource: null, listLimit: LIST_PAGE }); };
@@ -2462,7 +2464,7 @@ class Component extends DCLogic {
       sinceBorder: since ? 'oklch(0.78 0.15 95 / 0.7)' : 'oklch(0.34 0.012 260)',
       onSinceChange: this.onSinceChange, sinceFromLog: this.sinceFromLog,
       ...(() => { const c = collectRange(devicesObj); return { hasCollect: !!c.start, collectLabel: c.start ? (fmtDT(new Date(c.start)) + ' ~ ' + fmtDT(new Date(c.end)).slice(-5)) : '' }; })(),
-      sinceSourceLabel: since && st.sinceSource === 'hist' ? '（上一次收 log）' : since && st.sinceSource === 'guess' ? '（沒有上次紀錄，用這次收 log 往前 24 小時）' : '', sinceLastExport: this.sinceLastExport, clearSince: this.clearSince,
+      sinceSourceLabel: since && st.sinceSource === 'hist' ? '（上一次收 log）' : since && st.sinceSource === 'guess' ? '（沒有上次紀錄，推算前一個工作日收 log 的時間）' : '', sinceLastExport: this.sinceLastExport, clearSince: this.clearSince,
       urgentNavStyle: 'padding:9px 10px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:700;margin-bottom:4px;color:oklch(0.8 0.19 25);border:1px solid oklch(0.62 0.21 25 / 0.45);background:' + (view.kind === 'urgent' && !isSearching ? 'oklch(0.62 0.21 25 / 0.28)' : 'oklch(0.62 0.21 25 / 0.1)') + ';',
       modules, keywordChips,
       isDashboard, isDevices, isListView,
