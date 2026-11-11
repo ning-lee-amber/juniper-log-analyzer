@@ -2118,7 +2118,7 @@ class Component extends DCLogic {
     const isOver = (vals) => vals.some(v => v != null && v >= 80);
     const cmHosts = Object.values(devicesObj).map(d => {
       const comps = [];
-      (d.res || []).forEach(r => comps.push({ comp: 'RE' + r.slot, state: r.state || '-', vals: [r.cpu5s, r.cpu1m, r.cpu5m, r.cpu15m, r.mem, null] }));
+      (d.res || []).forEach(r => comps.push({ comp: 'RE' + r.slot, state: r.state || '-', vals: [r.cpu5s != null ? r.cpu5s : r.cpuNow, r.cpu1m, r.cpu5m, r.cpu15m, r.mem, null] }));
       (d.fpcs || []).forEach(f => comps.push({ comp: 'FPC ' + f.slot, state: 'Online', vals: [f.cpu, f.m1, f.m5, f.m15, f.heap, f.buf] }));
       return { host: d.hostname, comps, over: comps.some(c => isOver(c.vals)) };
     }).filter(h => h.comps.length).sort((a, b) => (b.over - a.over) || a.host.localeCompare(b.host));
