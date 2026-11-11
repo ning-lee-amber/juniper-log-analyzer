@@ -701,7 +701,7 @@
             </div>
           </div>
 
-          <div style="font-size:12px;font-weight:700;margin-bottom:6px;color:oklch(0.75 0.01 260);">原始日誌（最多顯示 50 筆）</div>
+          <div style="font-size:12px;font-weight:700;margin-bottom:6px;color:oklch(0.75 0.01 260);">{{selectedGroup.rawTitle}}</div>
           <div style="display:flex;flex-direction:column;gap:6px;">
             <sc-for list="{{selectedGroup.raws}}" as="raw" hint-placeholder-count="3">
               <pre style="margin:0;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10.5px;line-height:1.5;color:oklch(0.72 0.01 260);background:oklch(0.14 0.01 260);border:1px solid oklch(0.27 0.012 260);border-radius:5px;padding:7px 9px;white-space:pre-wrap;word-break:break-all;">{{raw}}</pre>
@@ -1749,7 +1749,10 @@ class Component extends DCLogic {
         if (entry.pid) g.pid = entry.pid;
         const im = entry.message.match(reIface); if (im) g.iface = im[1];
         const ipm = entry.message.match(reIp); if (ipm) g.ip = ipm[0];
-        if (g.raws.length < 50) g.raws.push(entry.raw);
+        // 保留最新的 300 筆原始日誌（含時間），點開時只顯示「只看這個時間之後」的
+        if (!g.rawT) g.rawT = [];
+        g.raws.push(entry.raw); g.rawT.push(entry.date ? entry.date.getTime() : 0);
+        if (g.raws.length > 300) { g.raws.shift(); g.rawT.shift(); }
       }
       if (mode) finalizeDeviceBlock(mode, bufferHost, currentVersion, buffer);
     }
@@ -2288,13 +2291,21 @@ class Component extends DCLogic {
       ...this.historyFor(g),
       ...cliReference(g),
       ...bookReference(g),
-      raws: (() => {
+      ...(() => {
+        const since = st.since;
+        const tOf = (i) => (g.rawT && g.rawT[i]) || 0;
+        let items = g.raws.map((r, i) => ({ r, t: tOf(i) }));
         const ident = extractDownUpIdentifier(g.sample);
-        if (!ident) return g.raws;
-        const extra = (st.downUpEvents || [])
+        if (ident) (st.downUpEvents || [])
           .filter(e => e.hostname === g.hostname && e.identifier === ident && e.upSample && !g.raws.includes(e.upSample))
-          .map(e => e.upSample);
-        return extra.length ? [...g.raws, ...extra].slice(0, 50) : g.raws;
+          .forEach(e => items.push({ r: e.upSample, t: e.upAt ? +e.upAt : 0 }));
+        if (since) items = items.filter(x => !x.t || x.t >= since);
+        items.sort((a, b) => a.t - b.t);
+        const n = items.length;
+        return {
+          raws: items.slice(-50).map(x => x.r),
+          rawTitle: '原始日誌' + (since ? '（' + fmtDT(new Date(since)) + ' 之後，共 ' + n + ' 筆' : '（共 ' + n + ' 筆') + (n > 50 ? '，顯示最新 50 筆）' : '）'),
+        };
       })(),
     });
 
