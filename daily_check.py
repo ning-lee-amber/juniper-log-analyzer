@@ -72,6 +72,17 @@ COL_NAME, COL_VER, COL_MODEL, COL_MEM, COL_CPU, COL_LOG, COL_WHO = 1, 2, 3, 5, 6
 LAST_COL = 10
 
 RE_PROMPT = re.compile(r'[\w.\-]+@([A-Za-z0-9][\w.\-]*?)>')
+# A10：行首「主機名稱#show ...」（去掉 -Active / -Standby）
+RE_PROMPT_A10 = re.compile(r'^([A-Z0-9][\w.\-]*?)(?:-Active|-Standby)?[#>]\s*(terminal length|show |exit)', re.I)
+# 只處理這三個區塊（WVPN-Brocade、Allot 由其他人負責）
+MY_SECTIONS = {'f1', 'a10', 'tapping'}
+# 要寫進 Daily 的硬體事件（跟網頁版「今日判讀 → 要寫 Daily」一致）
+HW_RULES = [
+    (re.compile(r'LUCHIP|IDMEM|parity|\bECC\b|uncorrectable|XMCHIP.*error|\bfatal\b', re.I), 'chip'),
+    (re.compile(r'(pem|power supply|fan).*(fail|absent)|temperature.*(high|hot|exceed)|overheat', re.I), 'env'),
+    (re.compile(r'laser bias current low|(tx|rx) power (low|high).*alarm set', re.I), 'optic'),
+]
+HW_NOISE = re.compile(r'PFEMAN|logrotate|sshd|I2C Failed|zlpmb_set_channel|READBACK|PCF8584|_IIC\(|PCA9548', re.I)
 RE_VERSION = re.compile(r'---\s*JUNOS\s+(\S+)|^Junos:\s*(\S+)', re.I)
 RE_SYSLOG = re.compile(r'^([A-Z][a-z]{2})\s+(\d{1,2})\s+(\d{2}):(\d{2}):(\d{2})\s+([\w.\-]+)\s+(.*)$')
 RE_IFACE = re.compile(r'\b((?:xe|ge|et|ae|so|fxp|em|irb|ps|st)-\d+[\d/:.]*)', re.I)
@@ -103,6 +114,9 @@ class Device:
         self.if_events = {}    # iface -> [(time, 'down'|'up', admin_down)]
         self.bfd = {}          # peer ip -> [time of 'Up -> Down']
         self.bfd_if = {}       # peer ip -> interface
+        self.hw = []           # [(time, text)] 要寫進 Daily 的硬體事件
+        self.cpu_other = None  # A10 / PICOS / 白牌的 CPU %
+        self.mem_other = None
 
 
 def parse_logs(paths, year):
@@ -134,6 +148,23 @@ def parse_logs(paths, year):
                     if mm or idle:
                         d.res.append((st.group(1).lower() if st else '', int(mm.group(1)) if mm else None,
                                       100 - int(idle.group(1)) if idle else None))
+            elif mode == 'ocpu':
+                text = '\n'.join(buf)
+                m = re.search(r'CPU usage:\s*(\d+)\s*%', text, re.I)                       # PICOS
+                ctl = re.findall(r'Control\d+\s+(?:\d+%\s+){4}(\d+)%', text)                 # A10：Control 60Sec 取最大
+                other = re.search(r'(?:CPU|Utilization|usage)[^\d\n]*?(\d+(?:\.\d+)?)\s*%', text, re.I)
+                d.cpu_other = int(m.group(1)) if m else max(map(int, ctl)) if ctl else round(float(other.group(1))) if other else None
+            elif mode == 'omem':
+                text = '\n'.join(buf)
+                m = re.search(r'^Mem:\s+(\d+)\s+(\d+)', text, re.M)                          # PICOS: total used
+                a10 = re.search(r'^Memory:\s+\d+\s+\d+\s+\d+\s+(\d+(?:\.\d+)?)%', text, re.M)
+                other = re.search(r'(?:Memory|usage|Utilization)[^\d\n]*?(\d+(?:\.\d+)?)\s*%', text, re.I)
+                d.mem_other = round(int(m.group(2)) / int(m.group(1)) * 100) if m else round(float(a10.group(1))) if a10 else round(float(other.group(1))) if other else None
+            elif mode == 'over':
+                text = '\n'.join(buf)
+                m = re.search(r'ACOS\)? version\s+([^\s,]+)', text, re.I) or re.search(r'L2/L3 Version/Revision\s*:\s*([\d.]+)', text, re.I)
+                if m:
+                    d.version = m.group(1)
             elif mode == 'alarms':
                 for l in buf:
                     m = RE_ALARM_LINE.match(l.strip())
@@ -143,24 +174,30 @@ def parse_logs(paths, year):
 
         block = {}
         for line in lines:
-            pm = RE_PROMPT.search(line)
+            pm = RE_PROMPT.search(line) or RE_PROMPT_A10.search(line)
             if pm:
                 flush()
                 block = {}
                 mode, buf = None, []
                 host = pm.group(1)
-                cmd = line[pm.end():]
+                cmd = line[line.find(pm.group(2)):].strip() if pm.re is RE_PROMPT_A10 else line[pm.end():].strip()
                 if re.search(r'show chassis routing-engine', cmd):
                     mode = 're'
                 elif re.search(r'show (chassis|system) alarms', cmd):
                     mode = 'alarms'
+                elif re.search(r'show system cpu-usage|^show system cpu$|^show cpu$', cmd):
+                    mode = 'ocpu'
+                elif re.search(r'show system memory-usage|^show system mem$|^show memory$', cmd):
+                    mode = 'omem'
+                elif re.search(r'^show version\s*(\|\s*no-more)?$', cmd):
+                    mode = 'over'
                 dev(host)
                 continue
             vm = RE_VERSION.search(line)
             if vm and host:
                 dev(host).version = vm.group(1) or vm.group(2)
             if mode:
-                if line.strip() == '' and buf:
+                if line.strip() == '' and buf and mode != 'over':   # show version 中間有空白行，讀到下一個提示字元才結束
                     flush()
                     mode, buf = None, []
                 else:
@@ -179,6 +216,19 @@ def parse_logs(paths, year):
                 t = dt.datetime(year, MONTHS[m.group(1)], int(m.group(2)), int(m.group(3)), int(m.group(4)), int(m.group(5)))
             except (KeyError, ValueError):
                 continue
+            if not HW_NOISE.search(msg):
+                for rx, kind in HW_RULES:
+                    if rx.search(msg):
+                        d = dev(m.group(6))
+                        fpc = re.search(r'\bfpc\s*(\d+)', msg, re.I)
+                        if kind == 'chip':
+                            what = 'LUCHIP IDMEM Parity error' if re.search(r'IDMEM', msg, re.I) and re.search(r'parity', msg, re.I) else 'Parity error' if re.search(r'parity', msg, re.I) else 'LUCHIP error'
+                            text = ('FPC %s ' % fpc.group(1) if fpc else '') + what
+                        else:
+                            text = re.sub(r'\s+', ' ', msg)[:80]
+                        if not any(x[1] == text for x in d.hw):
+                            d.hw.append((t, text))
+                        break
             if re.search(r'bfd', msg, re.I):
                 # BFD 只記 Down 不記 Up：不拿來判斷介面斷線，另外算 BFD 對端狂跳
                 d = dev(m.group(6))
@@ -213,8 +263,8 @@ def summarize(d, year):
     pool = master or d.res
     mems = [r[1] for r in pool if r[1] is not None]
     cpus = [r[2] for r in pool if r[2] is not None]
-    mem = round(max(mems)) if mems else None
-    cpu = round(max(cpus)) if cpus else None
+    mem = round(max(mems)) if mems else d.mem_other
+    cpu = round(max(cpus)) if cpus else d.cpu_other
     items, downs = [], []
     if mem is not None and mem > THRESHOLD:
         items.append('RE Memory %d%%' % mem)
@@ -223,6 +273,8 @@ def summarize(d, year):
     for ts, txt in d.alarms:
         if ts[:4] == str(year):          # 舊年度的 alarm 屬於長期存在，不列（SOP：看有沒有今年的）
             items.append('Alarm: %s (%s)' % (txt, ts))
+    for t, text in sorted(d.hw):        # 硬體事件寫在介面前面
+        items.append('%s (%s)' % (text, fmt_dt(t)))
     for ifn in sorted(d.if_events):
         evs = sorted(d.if_events[ifn])
         # 斷線次數：由 Up（或一開始）變成 Down 才算一次；同一次斷線好幾行只算一次
@@ -270,8 +322,8 @@ def read_export(path, year):
     out = {}
     for r in range(2, ws.max_row + 1):
         name = ws.cell(r, 1).value
-        if not name:
-            continue
+        if not name or str(ws.cell(r, 2).value or '').upper().startswith('QTY'):
+            continue                            # 區塊標頭列（F1 / A10 / Tapping）
         def pct(v):
             if isinstance(v, (int, float)):
                 return round(v * 100) if v <= 1.5 else round(v)
@@ -385,6 +437,8 @@ def run(workbook, logs, template=None, date=None, inspector=None, replace_name=N
             ws.cell(r, COL_WHO).value = a.inspector
         if not name or not section:
             continue
+        if section.strip().lower() not in MY_SECTIONS:
+            continue                            # WVPN-Brocade、Allot 等其他人負責的區塊不動
         b = base_name(name)
         rows_by_base[b] = r
         was_yellow = any((ws.cell(r, c).fill.fgColor.rgb or '') == YELLOW for c in range(1, LAST_COL + 1))
@@ -447,7 +501,7 @@ def run(workbook, logs, template=None, date=None, inspector=None, replace_name=N
     if notes:
         rep.append('\n備註：')
         rep.append('\n'.join('  ' + x for x in notes))
-    rep.append('\n其他區塊（WVPN / Allot / A10 / Tapping）中 log 裡沒有的設備，數值沿用範本 %s。' % tpl_name)
+    rep.append('\n只處理 F1、A10、Tapping；WVPN-Brocade、Allot 沿用範本 %s，不會改動。A10、Tapping 中 log 裡沒有的設備也沿用範本。' % tpl_name)
 
 
     return out, '\n'.join(rep)
