@@ -23,7 +23,7 @@ During daily device health checks and maintenance windows, reading through long 
 - **Device count** — shows how many devices were found in the logs (RE0 / RE1 count as one)
 - **CPU / Memory Top** — ranks devices by CPU and memory usage against an 80% threshold
 - **Down / Up event tracking** — pairs interface / session / slot down and up events, showing first & last down time, count, and which ones have not recovered
-- **Keyword quick filters** — one-click filters for `chip`, `error`, `alarm`, `fail`, `warning`, `mqss`, `fpc`, `link_down`
+- **Keyword quick filters** — a bar at the top of the page with one-click filters and counts for `chip`, `error`, `alarm`, `fail`, `warning`, `mqss`, `fpc`, `link_down`, plus `others` for every alert none of them catch
 - **Viewed history** — hides logs you have already reviewed, so you focus on what's new
 - **Search** — filter by PID, interface, IP address, error code, or any keyword
 - **Export to Excel** — Daily Check layout: one sheet named by the ROC date (device / Version / Model / Memory / CPU / log Analysis / inspector, every cell centred, unrecovered down rows in yellow) plus an 異常備註 sheet
