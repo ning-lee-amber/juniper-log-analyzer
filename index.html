@@ -1550,15 +1550,16 @@ class Component extends DCLogic {
       return e;
     }).sort((x, y) => x.name.localeCompare(y.name));
 
+    // log Analysis 只寫 flapping（介面 / BFD），其他都填 Normal
     const rows = [], yellow = new Set();
     entries.forEach(e => {
-      if (e.down) yellow.add(rows.length);
+      const fl = e.items.filter(t => /flapping/i.test(t));
       rows.push([e.name, e.ver || '', e.model || '',
         e.mem === null ? '無資料' : e.mem / 100,
         e.cpu === null ? '無資料' : e.cpu / 100,
-        e.items.length ? e.items.join('\n') : 'Normal', inspector]);
+        fl.length ? fl.join('\n') : 'Normal', inspector]);
     });
-    // 跟總表一樣：每一格水平、垂直都置中，Arial 12；未恢復的 down 整列標黃
+    // 跟總表一樣：每一格水平、垂直都置中，Arial 12
     const styleFn = (ri, ci, v) => {
       const y = yellow.has(ri);
       if ((ci === 3 || ci === 4) && typeof v === 'number') return y ? 11 : 9;

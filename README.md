@@ -27,7 +27,7 @@ During daily device health checks and maintenance windows, reading through long 
 - **Unviewed / viewed history** — 未看紀錄 lists everything you have not opened yet; 已看紀錄 keeps what you reviewed so it is hidden next time
 - **Low-priority logs hidden** — routine messages stay hidden everywhere, including searches and keyword filters, until you turn them on
 - **Search** — filter by PID, interface, IP address, error code, or any keyword
-- **Export to Excel** — Daily Check layout: one sheet named by the ROC date (device / Version / Model / Memory / CPU / log Analysis / inspector, every cell centred, unrecovered down rows in yellow) plus an 異常備註 sheet
+- **Export to Excel** — Daily Check layout: one sheet named by the ROC date (device / Version / Model / Memory / CPU / log Analysis / inspector, every cell centred; log Analysis only lists flapping interfaces and BFD peers, everything else is Normal) plus an 異常備註 sheet
 - **介面狂跳** — interfaces and BFD/BGP peers that went down 3+ times; the same peer flapping on two devices at once is merged and flagged as a peer/line problem
 - **疑似維護** — a device where 5+ interfaces go down within one hour is flagged as a possible maintenance window
 - **只看這個時間之後** — hide events before a chosen time
