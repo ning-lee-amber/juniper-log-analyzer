@@ -84,7 +84,7 @@
 
 
         <sc-if value="{{isFlap}}" hint-placeholder-val="{{false}}">
-          <div style="font-size:14px;font-weight:700;margin:0 0 6px;">🔁 介面狂跳（Up → Down 達 {{flapMin}} 次以上）</div>
+          <div style="font-size:14px;font-weight:700;margin:0 0 6px;">🔁 link_down 狂跳（Up → Down 達 {{flapMin}} 次以上，{{linkFlapCount}} 個）</div>
           <div style="font-size:11.5px;color:oklch(0.58 0.01 260);margin:0 0 12px;line-height:1.6;">計算 log 期間內同一個介面或對端由 Up 變 Down 的次數；同一次斷線出現好幾行（SNMP trap、aftd 等）只算一次。目前仍是 Down 的排在最前面。點一列可以查看相關 log。</div>
           <sc-if value="{{hasFlaps}}" hint-placeholder-val="{{false}}">
             <div style="overflow-x:auto;background:oklch(0.21 0.012 260);border:1px solid oklch(0.3 0.012 260);border-radius:8px;">
@@ -111,7 +111,36 @@
             </div>
           </sc-if>
           <sc-if value="{{noFlaps}}" hint-placeholder-val="{{false}}">
-            <div style="padding:16px;font-size:12.5px;color:oklch(0.55 0.01 260);">沒有介面狂跳。</div>
+            <div style="padding:16px;font-size:12.5px;color:oklch(0.55 0.01 260);">沒有 link_down 狂跳。</div>
+          </sc-if>
+
+          <div style="font-size:14px;font-weight:700;margin:22px 0 6px;">❗ error 狂跳（同一個 error 重複 {{errFlapMin}} 次以上，{{errFlapCount}} 筆）</div>
+          <div style="font-size:11.5px;color:oklch(0.58 0.01 260);margin:0 0 12px;line-height:1.6;">Error 等級以上、不含介面上下線（那些算在上面的 link_down）、不含低優先日誌。次數只算「只看這個時間之後」的。點一列可以在右側看原始 log。</div>
+          <sc-if value="{{hasErrFlaps}}" hint-placeholder-val="{{false}}">
+            <div style="overflow-x:auto;background:oklch(0.21 0.012 260);border:1px solid oklch(0.3 0.012 260);border-radius:8px;">
+              <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+                <thead>
+                  <tr style="text-align:left;color:oklch(0.6 0.01 260);">
+                    <th style="padding:8px 10px;">設備</th><th style="padding:8px 10px;">Error</th>
+                    <th style="padding:8px 10px;text-align:right;">次數</th><th style="padding:8px 10px;">期間</th><th style="padding:8px 10px;">有沒有 clear</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <sc-for list="{{errFlapRows}}" as="ef" hint-placeholder-count="3">
+                    <tr onClick="{{ef.select}}" style="border-top:1px solid oklch(0.27 0.012 260);cursor:pointer;">
+                      <td style="padding:7px 10px;font-weight:600;white-space:nowrap;">{{ef.hostname}}</td>
+                      <td style="padding:7px 10px;color:oklch(0.88 0.006 260);max-width:520px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ef.sample}}</td>
+                      <td style="padding:7px 10px;text-align:right;font-weight:700;color:oklch(0.78 0.15 95);font-variant-numeric:tabular-nums;">{{ef.count}}</td>
+                      <td style="padding:7px 10px;white-space:nowrap;color:oklch(0.75 0.01 260);font-variant-numeric:tabular-nums;">{{ef.range}}</td>
+                      <td style="padding:7px 10px;white-space:nowrap;font-weight:700;color:{{ef.clearColor}};">{{ef.clearText}}</td>
+                    </tr>
+                  </sc-for>
+                </tbody>
+              </table>
+            </div>
+          </sc-if>
+          <sc-if value="{{noErrFlaps}}" hint-placeholder-val="{{false}}">
+            <div style="padding:16px;font-size:12.5px;color:oklch(0.55 0.01 260);">沒有 error 狂跳。</div>
           </sc-if>
         </sc-if>
 
@@ -183,7 +212,7 @@
                   </sc-if>
                 </div>
                 <div style="font-size:12px;color:oklch(0.8 0.006 260);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{g.sample}}</div>
-                <div style="font-size:11px;color:oklch(0.55 0.01 260);margin-top:2px;">{{g.timeRange}}</div>
+                <div style="font-size:11px;color:oklch(0.55 0.01 260);margin-top:2px;display:flex;gap:10px;flex-wrap:wrap;"><span>{{g.timeRange}}</span><sc-if value="{{g.clearText}}" hint-placeholder-val="{{false}}"><span style="font-weight:700;color:{{g.clearColor}};">{{g.clearText}}</span></sc-if></div>
               </div>
               <div style="font-size:15px;font-weight:700;color:oklch(0.7 0.01 260);flex-shrink:0;">×{{g.count}}</div>
             </div>
@@ -246,6 +275,7 @@
             <div><div style="color:oklch(0.55 0.01 260);">IP</div><div>{{selectedGroup.ipDisplay}}</div></div>
             <div><div style="color:oklch(0.55 0.01 260);">發生次數</div><div>{{selectedGroup.count}}<span style="color:oklch(0.55 0.01 260);font-size:11px;">{{selectedGroup.countAllNote}}</span></div></div>
             <div><div style="color:oklch(0.55 0.01 260);">時間範圍</div><div>{{selectedGroup.timeRange}}</div></div>
+            <sc-if value="{{selectedGroup.clearText}}" hint-placeholder-val="{{false}}"><div style="grid-column:1 / -1;"><div style="color:oklch(0.55 0.01 260);">有沒有 clear</div><div style="font-weight:700;color:{{selectedGroup.clearColor}};">{{selectedGroup.clearText}}</div></div></sc-if>
           </div>
 
           <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:16px;">
@@ -636,6 +666,52 @@ function dailyBase(h){ return String(h || '').trim().replace(/[._\-](re\d|node\d
 function rocDate(d){ const p = n => String(n).padStart(2, '0'); return String(d.getFullYear() - 1911) + p(d.getMonth() + 1) + p(d.getDate()); }
 // ===== 介面狂跳：同一個介面 / 對端由 Up 變 Down 達 FLAP_MIN 次 =====
 const FLAP_MIN = 3;
+const ERR_FLAP_MIN = 5;   // 同一個 error 在時間範圍內重複幾次以上算「error 狂跳」
+// ===== 有沒有 clear =====
+// 把「發生」和「clear」的訊息變成同一個 key：例如 Alarm set: X ↔ Alarm cleared: X、DDOS_..._VIOLATION ↔ DDOS_..._VIOLATION_CLEAR
+function isClearMsg(msg){ return /\bclear(ed)?\b|_CLEAR\b|returned to normal/i.test(msg) && !/attempting to clear/i.test(msg); }
+function clearKey(msg){
+  const m = String(msg);
+  const dd = m.match(/protocol\/exception\s+(\S+?):?(\S*)\s/i); if (/DDOS_PROTOCOL_VIOLATION/i.test(m) && dd) return 'ddos|' + dd[1].toLowerCase();
+  const al = m.match(/alarm (?:set|cleared)[:,]\s*(.*)$/i); if (al) return 'alarm|' + normalizeMsg(al[1]).toLowerCase().trim();
+  const al2 = m.match(/(?:major|minor) alarm (?:set|cleared),\s*(.*)$/i); if (al2) return 'alarm|' + normalizeMsg(al2[1]).toLowerCase().trim();
+  return 'gen|' + normalizeMsg(m.replace(/^.*?%[A-Z]+-\d(-[A-Z0-9_]+)?:\s*/, ''))
+    .replace(/_(SET|CLEAR|CLEARED)\b/gi, '').replace(/\b(alarm|warning)?\s*(set|cleared|clear|raised|detected|asserted|deasserted)\b/gi, ' ')
+    .replace(/\s+/g, ' ').toLowerCase().trim();
+}
+// host|key → clear 的時間（越新越前面）
+function buildClearIndex(groups){
+  const idx = new Map();
+  Object.values(groups || {}).forEach(g => {
+    if (!isClearMsg(g.sample)) return;
+    const k = g.hostname + '|' + clearKey(g.sample);
+    const t = (g.ts || []).filter(Boolean);
+    const last = t.length ? Math.max(...t) : (g.last ? +g.last : 0);
+    if (!idx.has(k) || idx.get(k) < last) idx.set(k, last);
+  });
+  return idx;
+}
+// 回傳 { text, color }；不是 error、也找不到 clear 的就回傳 null
+function clearStatus(g, clearIdx, downUpEvents){
+  if (isClearMsg(g.sample)) return null;
+  const st = detectDownUpState(g.sample), id = st === 'down' ? extractDownUpIdentifier(g.sample) : null;
+  if (id) {
+    const evs = (downUpEvents || []).filter(e => e.hostname === g.hostname && e.identifier === id);
+    if (evs.length) {
+      const open = evs.some(e => !e.recovered);
+      if (open) return { text: '✖ 沒有 clear（仍是 Down）', color: 'oklch(0.75 0.19 25)' };
+      const up = Math.max(...evs.map(e => +e.upAt || 0));
+      return { text: '✔ 已 clear（Up ' + fmtDT(new Date(up)) + '）', color: 'oklch(0.75 0.15 150)' };
+    }
+  }
+  const c = clearIdx.get(g.hostname + '|' + clearKey(g.sample));
+  if (c) {
+    if (g.last && c < +g.last) return { text: '⚠ clear 後又發生（clear ' + fmtDT(new Date(c)) + '）', color: 'oklch(0.82 0.14 80)' };
+    return { text: '✔ 已 clear（' + fmtDT(new Date(c)) + '）', color: 'oklch(0.75 0.15 150)' };
+  }
+  if (g.severity <= 3) return { text: '✖ 沒有 clear', color: 'oklch(0.75 0.19 25)' };
+  return null;
+}
 function flapKind(id){
   const k = String(id).split(':')[0];
   return k === 'if' ? '介面' : k === 'ip' ? '對端 IP（BFD/BGP）' : k === 'session' ? 'Session' : (k === 'slot' || k === 'fpc') ? 'FPC/PIC' : k;
@@ -1602,6 +1678,16 @@ class Component extends DCLogic {
       statusColor: f.stillDown ? 'oklch(0.72 0.19 25)' : f.unknown ? 'oklch(0.65 0.01 260)' : 'oklch(0.72 0.15 150)',
       select: () => this.setState({ searchQuery: f.search, selectedKey: null, listLimit: LIST_PAGE }),
     }));
+    const clearIdx = buildClearIndex(groupsObj);
+    // error 狂跳：同一個 error（Error 等級以上，不含介面上下線）在時間範圍內重複 ERR_FLAP_MIN 次以上
+    const errFlaps = Object.values(groupsObj).filter(g => g.severity <= 3 && !isIgnored(g) && !isClearMsg(g.sample) && !(detectDownUpState(g.sample) && extractDownUpIdentifier(g.sample)))
+      .map(g => ({ g, n: sinceStat(g).count })).filter(x => x.n >= ERR_FLAP_MIN).sort((a, b) => b.n - a.n);
+    const errFlapRows = errFlaps.map(({ g, n }) => {
+      const c = clearStatus(g, clearIdx, st.downUpEvents) || { text: '', color: '' };
+      return { hostname: g.hostname, sample: g.sample, count: n, range: fmtDT(sinceStat(g).first) + ' ~ ' + fmtDT(g.last), clearText: c.text, clearColor: c.color,
+        select: () => this.selectGroup(g.key) };
+    });
+    const flapTotal = flaps.length + errFlaps.length;
     const seen = st.seen || {};
     const notSeen = (g) => g.key === st.selectedKey || !isSeenGroup(g, seen);
 
@@ -1615,7 +1701,8 @@ class Component extends DCLogic {
       isLowPriority: isIgnored(g),
       seenLabel: seen[g.key] ? ('✓ 已看過 ' + fmtFull(seen[g.key].seenAt)) : '',
       sevColor: sevColor(g.severity),
-      isStorm: sinceStat(g).count >= 5,
+      isStorm: sinceStat(g).count >= ERR_FLAP_MIN,
+      ...(() => { const c = clearStatus(g, clearIdx, st.downUpEvents); return { clearText: c ? c.text : '', clearColor: c ? c.color : '' }; })(),
       timeRange: fmtDT(sinceStat(g).first) + ' → ' + fmtDT(g.last),
       select: () => this.selectGroup(g.key),
       rowStyle: 'display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-bottom:1px solid oklch(0.25 0.012 260);cursor:pointer;opacity:' + (seen[g.key] && st.selectedKey !== g.key ? '0.6' : '1') + ';background:' + (st.selectedKey === g.key ? 'oklch(0.26 0.02 235)' : 'transparent') + ';',
@@ -1782,17 +1869,18 @@ class Component extends DCLogic {
       modules, keywordChips, isListView, fileCount: (st.rawFiles || []).length,
       listTitle: isSearching ? ('搜尋結果：「' + searchQuery + '」') : (view.kind === 'linkdown' ? 'link_down(尚未恢復)' : view.kind === 'others' ? 'others（上面關鍵字都沒抓到的其他告警）' : view.kind === 'unseen' ? '🆕 未看紀錄（還沒點開看過的，含低優先日誌）' : view.kind === 'urgent' ? '⚠ 緊急處理' : view.kind === 'severity' ? 'Alert / Error（含 Emergency、Critical）' : (view.module || '模組')),
       cpuTop, memTop,
-      isFlap, flapRows, flapTop: flapRows.slice(0, 6), flapCount: flaps.length, flapMin: FLAP_MIN,
+      isFlap, flapRows, flapTop: flapRows.slice(0, 6), flapCount: flapTotal, flapMin: FLAP_MIN, errFlapMin: ERR_FLAP_MIN,
+      errFlapRows, hasErrFlaps: errFlaps.length > 0, noErrFlaps: errFlaps.length === 0, linkFlapCount: flaps.length, errFlapCount: errFlaps.length,
       hasFlaps: flaps.length > 0, noFlaps: flaps.length === 0,
       flapStillDownCount, hasFlapStillDown: flapStillDownCount > 0, selectFlap: this.selectFlap,
       // 有狂跳時變成紅色通知（會閃）；沒有狂跳時是灰色
-      flapNavText: flaps.length ? '🔔 有狂跳！' : '🔁 介面狂跳（無）',
-      showFlapAlert: flaps.length > 0 && !isFlap,
-      flapAlertText: flaps.length + ' 個介面 / 對端在狂跳' + (flapStillDownCount ? '，其中 ' + flapStillDownCount + ' 個目前仍是 Down' : ''),
-      flapNavStyle: 'padding:9px 10px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:700;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;gap:6px;' + (flaps.length
+      flapNavText: flapTotal ? '🔔 有狂跳！' : '🔁 狂跳（無）',
+      showFlapAlert: flapTotal > 0 && !isFlap,
+      flapAlertText: [flaps.length ? 'link_down 狂跳 ' + flaps.length + ' 個' + (flapStillDownCount ? '（' + flapStillDownCount + ' 個仍是 Down）' : '') : '', errFlaps.length ? 'error 狂跳 ' + errFlaps.length + ' 筆' : ''].filter(Boolean).join('、'),
+      flapNavStyle: 'padding:9px 10px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:700;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;gap:6px;' + (flapTotal
         ? 'color:oklch(0.9 0.12 25);border:1px solid oklch(0.62 0.21 25 / 0.7);background:' + (isFlap ? 'oklch(0.62 0.21 25 / 0.3)' : 'oklch(0.62 0.21 25 / 0.15)') + ';' + (isFlap ? '' : 'animation:jlaPulse 1.8s ease-in-out infinite;')
         : 'color:oklch(0.65 0.01 260);border:1px solid oklch(0.32 0.012 260);background:' + (isFlap ? 'oklch(0.26 0.012 260)' : 'transparent') + ';'),
-      flapBadgeStyle: 'font-size:11.5px;font-weight:700;padding:1px 8px;border-radius:10px;background:' + (flaps.length ? 'oklch(0.62 0.21 25 / 0.45)' : 'oklch(0.3 0.012 260)') + ';color:' + (flaps.length ? 'oklch(0.95 0.05 25)' : 'oklch(0.6 0.01 260)') + ';',
+      flapBadgeStyle: 'font-size:11.5px;font-weight:700;padding:1px 8px;border-radius:10px;background:' + (flapTotal ? 'oklch(0.62 0.21 25 / 0.45)' : 'oklch(0.3 0.012 260)') + ';color:' + (flapTotal ? 'oklch(0.95 0.05 25)' : 'oklch(0.6 0.01 260)') + ';',
       isCpuMem, cpuMemRows, cpuMemOverCount, hasCpuMemRows: cpuMemRows.length > 0, noCpuMemRows: cpuMemRows.length === 0,
       selectCpuMem: this.selectCpuMem, toggleCmOnlyOver: this.toggleCmOnlyOver,
       cmOnlyOverLabel: cmOnlyOver ? '✓ 只看超標' : '只看超標',

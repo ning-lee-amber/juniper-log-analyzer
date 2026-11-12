@@ -28,7 +28,8 @@ During daily device health checks and maintenance windows, reading through long 
 - **Low-priority logs hidden** — routine messages stay hidden everywhere, including searches and keyword filters, until you turn them on
 - **Search** — filter by PID, interface, IP address, error code, or any keyword
 - **Export to Excel** — Daily Check layout: one sheet named by the ROC date (device / Version / Model / Memory / CPU / log Analysis / inspector, every cell centred; log Analysis only lists flapping interfaces and BFD peers, everything else is Normal) plus an 異常備註 sheet
-- **介面狂跳** — interfaces and BFD/BGP peers that went down 3+ times; the same peer flapping on two devices at once is merged and flagged as a peer/line problem
+- **狂跳** — link_down flapping (interfaces and BFD/BGP peers down 3+ times; the same peer on two devices is merged) plus error flapping (the same Error-or-worse message 5+ times); the nav item turns into a red alert and a banner appears when anything is flapping
+- **有沒有 clear** — every Error row shows whether it was cleared: link down → Up, Alarm set → Alarm cleared, DDoS violation → returned to normal, or a later message saying cleared
 - **疑似維護** — a device where 5+ interfaces go down within one hour is flagged as a possible maintenance window
 - **只看這個時間之後** — hide events before a chosen time
 - **No installation** — runs in the browser; UI in Traditional Chinese
