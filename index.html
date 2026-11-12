@@ -1467,24 +1467,152 @@ class Component extends DCLogic {
     return arr;
   };
 
+  // 匯出 Excel：Daily Check 格式（工作表用民國日期命名 + 異常備註），log 裡有的設備全部列出，依名稱排序
   exportExcel = () => {
     const st = this.state;
-    const seen = st.seen || {};
-    const groups = Object.values(st.groups || {}).sort((a, b) => a.severity - b.severity || (b.last || 0) - (a.last || 0) || b.count - a.count);
-    const errRows = groups.map(g => [g.hostname, g.severityName, g.module, g.eventType, g.tag || '-', g.count, fmtDT(g.first), fmtDT(g.last), g.iface || '-', g.ip || '-', urgentReason(g) || '', isIgnored(g) ? '是' : '否', isSeenGroup(g, seen) ? '是' : '否', g.sample]);
-    const devices = Object.values(st.devices || {}).sort((a, b) => a.hostname.localeCompare(b.hostname));
-    const devRows = devices.map(d => [d.hostname, d.version || '-', d.model || '-', d.cpuUsage || '-', d.memUsage || '-', d.alarmCount ?? 0, d.errorCount || 0]);
-    const duRows = (st.downUpEvents || []).map(e => [e.hostname, e.identifier, fmtDT(e.downFirst), fmtDT(e.downLast), e.downCount, e.recovered ? '是' : '否', e.recovered ? fmtDT(e.upAt) : '-', e.downSample || '', e.upSample || '']);
-    const seenRows = Object.values(seen).sort((a, b) => (b.seenAt || 0) - (a.seenAt || 0)).map(s => [fmtFull(s.seenAt), s.hostname || '-', s.severityName || '-', s.eventType || '-', s.count || 0, fmtFull(s.lastLog), s.sample || '']);
-    const histRows = (st.customHist || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date))).map(c => [c.date || '-', c.hostname || '-', c.eventType || '-', c.note || '', c.sample || '']);
+    if (!(st.rawFiles || []).length) { window.alert('請先上傳 raw log。'); return; }
+    let inspector = '';
+    try { inspector = localStorage.getItem('jla_daily_inspector') || ''; } catch {}
+    const ans = window.prompt('檢查人員（可留白）', inspector);
+    if (ans === null) return;
+    inspector = ans.trim();
+    try { localStorage.setItem('jla_daily_inspector', inspector); } catch {}
+
+    // 以前匯入過的 Daily 清單（只存在這台電腦的瀏覽器）只用來補 Version / Model（log 裡沒有 show version）；沒有清單就從設備名稱判斷 Model
+    const cfg = loadDaily();
+    const listRow = new Map(cfg.list.map(r => [dailyBase(r[0]), r]));
+    const nameModel = (h) => { const m = String(h).toUpperCase().match(/(MX\d{3,4}|QFX\d{4}|EX\d{4}|SRX\d{3,4}|PTX\d{4,5}|ACX\d{4})/); return m ? m[1] : ''; };
+    const byBase = {};
+    Object.values(st.devices || {}).forEach(d => { const b = dailyBase(d.hostname); (byBase[b] = byBase[b] || []).push(d); });
+    const duByBase = {};
+    // BFD 只記 Down 不記 Up，不能拿來判斷介面有沒有恢復；BFD 另外用狂跳清單處理
+    (st.downUpEvents || []).forEach(e => { if (!String(e.identifier).startsWith('if:') || /bfd/i.test(e.downSample || '')) return; const b = dailyBase(e.hostname); (duByBase[b] = duByBase[b] || []).push(e); });
+    const bfdByBase = {};
+    computeFlaps(st.duTracker).filter(f => f.kind === 'BFD 對端').forEach(f => { const b = dailyBase(f.hostname); (bfdByBase[b] = bfdByBase[b] || []).push(f); });
+    // 要寫 Daily 的硬體事件（今日判讀「要寫 Daily」區的那些）
+    const hwByBase = {};
+    Object.values(st.groups || {}).forEach(g => { const t = triageOf(g); if (t && t.zone === 'write') { const b = dailyBase(g.hostname); (hwByBase[b] = hwByBase[b] || []).push(g); } });
+    const maint = detectMaint(st.downUpEvents);
+    const maintByBase = {};
+    Object.entries(maint).forEach(([h, ws]) => { maintByBase[dailyBase(h)] = (maintByBase[dailyBase(h)] || []).concat(ws); });
+
+    const maxOf = arr => { const v = arr.filter(x => x !== null && x !== undefined && isFinite(x)); return v.length ? Math.round(Math.max(...v)) : null; };
+    const pctNum = s => { const n = parseInt(s, 10); return isFinite(n) ? n : null; };
+    const fmtAlarmTs = s => { const m = s.match(/^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})/); return m ? m[1] + ' ' + m[2] : ''; };
+
+    const notify = [], notes0 = [];
+    // 跟昨天的 log Analysis 比：同一個項目去掉時間後相同就算「延續中」
+    const itemKey = (t) => t.replace(/\s*\([^()]*\)\s*$/, '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const compareWithPrev = (items, prevText) => {
+      const prevLines = String(prevText || '').split(/\r?\n/).map(x => x.trim()).filter(x => x && x !== 'Normal' && x !== '無資料');
+      const prevKeys = new Map(prevLines.map(l => [itemKey(l), l]));
+      const curKeys = new Set(items.map(itemKey));
+      return {
+        status: items.map(t => prevKeys.has(itemKey(t)) ? 'cont' : 'new'),
+        resolved: prevLines.filter(l => !curKeys.has(itemKey(l))),
+      };
+    };
+    const one = (name, ver0, model0, b, inList, section, prevText) => {
+      const ds = byBase[b] || [];
+      if (!ds.length) return { name, ver: ver0, model: model0, inList, section, prevText, hasData: false, mem: null, cpu: null, items: [], status: [], resolved: [], hints: [], down: false };
+      // 有 Master RE 就用 Master 的數值（跟 daily_check.py 及原本的 Daily 表一致），沒有才取最大值
+      const allRes = ds.flatMap(d => d.res || []), master = allRes.filter(r => /master/i.test(r.state || ''));
+      const pool = master.length ? master : allRes;
+      const mem = maxOf(pool.length ? pool.map(r => r.mem) : ds.map(d => pctNum(d.memUsage)));
+      const cpu = maxOf(pool.length ? pool.map(r => r.cpu5s != null ? r.cpu5s : r.cpuNow) : ds.map(d => pctNum(d.cpuUsage)));   // 舊版 Junos 沒有「5 sec」字樣
+      const ver = (ds.find(d => d.version) || {}).version || ver0;
+      const model = model0;   // routing-engine 輸出的 Model 是 RE 板卡，不是機型，所以不用
+      if (inList && ver0 && ver !== ver0) notes0.push(['版本變動', name, ver0 + ' → ' + ver]);
+
+      const items = [], hints = [];
+      if (mem !== null && mem > DAILY_THRESHOLD) items.push('RE Memory ' + mem + '%');
+      if (cpu !== null && cpu > DAILY_THRESHOLD) items.push('RE CPU ' + cpu + '%');
+      ds.forEach(d => (d.alarmLines || []).forEach(l => {
+        const txt = l.replace(/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(:\d{2})?\s*(\w{2,4})?\s+(Major|Minor|Critical)?\s*/i, '');
+        const ts = fmtAlarmTs(l);
+        if (ts.slice(0, 4) !== String(new Date().getFullYear())) return;   // 舊年度的 alarm 屬於長期存在，不列（SOP：看有沒有今年的）
+        const it = 'Alarm: ' + txt + ' (' + ts + ')';
+        if (!items.includes(it)) items.push(it);
+      }));
+      // 硬體事件寫在介面前；FPC 上下電只當提示（前一天表上有記 offline 才寫）
+      const fruSeen = new Map();
+      (hwByBase[b] || []).sort((x, y) => (x.first || 0) - (y.first || 0)).forEach(g => {
+        const h = hwText(g);
+        if (h.fru) {
+          if (/^PIC:/i.test(h.key)) return;
+          const prev = fruSeen.get(h.key);
+          if (!prev || /online|offline/.test(h.text)) fruSeen.set(h.key, h.text);
+          return;
+        }
+        if (!items.includes(h.text)) items.push(h.text);
+      });
+      fruSeen.forEach(t => hints.push('⚠ ' + t + '：前一天表上有記這張卡 offline 才寫'));
+      (maintByBase[b] || []).forEach(m => hints.push(maintNote(m)));
+      // Link down / up：依實體介面彙整
+      const byIf = {};
+      (duByBase[b] || []).forEach(e => { const k = physIf(e.identifier); (byIf[k] = byIf[k] || []).push(e); });
+      let down = false;
+      Object.keys(byIf).sort().forEach(ifn => {
+        const evs = byIf[ifn].sort((x, y) => x.downFirst - y.downFirst);
+        const open = evs.filter(e => !e.recovered);
+        if (open.length && /ifAdminStatus\s+down/i.test(open[open.length - 1].downSample || '')) {
+          items.push(ifn + ' admin down (' + fmtDT(open[open.length - 1].downLast) + ')');   // 手動關閉，不標黃
+        } else if (open.length) {
+          const t = open[open.length - 1].downLast;
+          items.push(ifn + ' down (' + fmtDT(t) + ')');
+          if (inList) notify.push([name, ifn, fmtDT(t)]);
+          down = true;
+        } else {
+          // 斷線次數：每個 down→up 算一次；同一實體介面的邏輯單元（.0）取最大值，不重複相加
+          const perId = {}; evs.forEach(e => { perId[e.identifier] = (perId[e.identifier] || 0) + 1; });
+          const n = Math.max(...Object.values(perId));
+          const endAt = evs[evs.length - 1].upAt, startAt = evs[0].downFirst;
+          const end = endAt && startAt && endAt.toDateString() === startAt.toDateString() ? fmtDT(endAt).slice(-5) : fmtDT(endAt);
+          if (n >= 3) items.push(ifn + ' flapping (' + fmtDT(startAt) + '~' + end + ')');
+          else items.push(ifn + '\t瞬斷，已恢復');
+        }
+      });
+      (bfdByBase[b] || []).forEach(f => {
+        const end = f.first && f.last && f.first.toDateString() === f.last.toDateString() ? fmtDT(f.last).slice(-5) : fmtDT(f.last);
+        items.push('BFD ' + f.label.replace('（', ' (').replace('）', ')') + ' flapping (' + fmtDT(f.first) + '~' + end + ')');   // 不標黃
+      });
+      if (inList && (mem === null || cpu === null)) notes0.push(['缺 CPU/Memory', name, 'raw data 中沒有 show chassis routing-engine 輸出']);
+      const cmp = compareWithPrev(items, prevText);
+      return { name, ver, model, inList, section, prevText, hasData: true, mem, cpu, items, status: cmp.status, resolved: cmp.resolved, hints, down };
+    };
+
+    const notes = notes0;
+    const entries = Object.keys(byBase).map(b => {
+      const ds = byBase[b];
+      const m = ds.find(d => (d.res || []).some(r => /master/i.test(r.state || ''))) || ds[0];
+      const lr = listRow.get(b) || [];
+      const e = one(m.hostname, lr[1] || '', lr[2] || nameModel(m.hostname), b, true, '', '');
+      (e.hints || []).forEach(t => notes.push(['提示', e.name, t.replace(/^⚠\s*/, '')]));
+      return e;
+    }).sort((x, y) => x.name.localeCompare(y.name));
+
+    const rows = [], yellow = new Set();
+    entries.forEach(e => {
+      if (e.down) yellow.add(rows.length);
+      rows.push([e.name, e.ver || '', e.model || '',
+        e.mem === null ? '無資料' : e.mem / 100,
+        e.cpu === null ? '無資料' : e.cpu / 100,
+        e.items.length ? e.items.join('\n') : 'Normal', inspector]);
+    });
+    // 跟總表一樣：每一格水平、垂直都置中，Arial 12；未恢復的 down 整列標黃
+    const styleFn = (ri, ci, v) => {
+      const y = yellow.has(ri);
+      if ((ci === 3 || ci === 4) && typeof v === 'number') return y ? 11 : 9;
+      if (ci === 5) return y ? 13 : 12;
+      return y ? 10 : 8;
+    };
+    const day = new Date();
     const blob = buildXlsx([
-      { name: 'Error Log', header: ['Hostname','Severity','Module','EventType','Tag','Count','First','Last','Interface','IP','緊急原因','低優先','已看過','Message'], rows: errRows },
-      { name: 'CPU_Memory Usage', header: ['Hostname','Version','Model','CPU Usage','Memory Usage','Alarm Count','Error Count'], rows: devRows },
-      { name: 'Down-Up Events', header: ['Hostname','識別(介面/Session/Slot/IP)','Down 首次','Down 最後','次數','是否恢復Up','Up 時間','Down 樣本訊息','Up 樣本訊息'], rows: duRows },
-      { name: '已看紀錄', header: ['看過時間','Hostname','Severity','EventType','當時次數','當時最後發生','Message'], rows: seenRows },
-      { name: '我的歷史案例', header: ['日期','Hostname','EventType','處理說明','訊息'], rows: histRows },
+      { name: rocDate(day), header: ['', 'Version', 'Model', 'Memory Usage', 'CPU Usage', 'log Analysis', '檢查人員'], rows, styleFn },
+      { name: '異常備註', header: ['類型', '設備', '說明'], rows: notes.length ? notes : [['無', '', '']] },
     ]);
-    downloadBlob(blob, 'juniper_log_analysis_' + todayStr() + '.xlsx');
+    const p = n => String(n).padStart(2, '0');
+    downloadBlob(blob, day.getFullYear() + p(day.getMonth() + 1) + p(day.getDate()) + '_Daily_check.xlsx');
   };
 
   renderVals() {

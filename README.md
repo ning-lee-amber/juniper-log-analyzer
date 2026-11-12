@@ -26,7 +26,7 @@ During daily device health checks and maintenance windows, reading through long 
 - **Keyword quick filters** — one-click filters for `chip`, `error`, `alarm`, `fail`, `warning`, `mqss`, `fpc`, `link_down`
 - **Viewed history** — hides logs you have already reviewed, so you focus on what's new
 - **Search** — filter by PID, interface, IP address, error code, or any keyword
-- **Export to Excel** — export results for reporting
+- **Export to Excel** — Daily Check layout: one sheet named by the ROC date (device / Version / Model / Memory / CPU / log Analysis / inspector, every cell centred, unrecovered down rows in yellow) plus an 異常備註 sheet
 - **介面狂跳** — interfaces and BFD/BGP peers that went down 3+ times; the same peer flapping on two devices at once is merged and flagged as a peer/line problem
 - **疑似維護** — a device where 5+ interfaces go down within one hour is flagged as a possible maintenance window
 - **只看這個時間之後** — hide events before a chosen time; 「取 log 時間」 works out when the logs were collected (RE Start time + Uptime) and jumps to the previous collection
