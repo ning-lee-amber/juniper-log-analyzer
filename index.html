@@ -1481,7 +1481,7 @@ class Component extends DCLogic {
     // 以前匯入過的 Daily 清單（只存在這台電腦的瀏覽器）只用來補 Version / Model（log 裡沒有 show version）；沒有清單就從設備名稱判斷 Model
     const cfg = loadDaily();
     const listRow = new Map(cfg.list.map(r => [dailyBase(r[0]), r]));
-    const nameModel = (h) => { const m = String(h).toUpperCase().match(/(MX\d{3,4}|QFX\d{4}|EX\d{4}|SRX\d{3,4}|PTX\d{4,5}|ACX\d{4})/); return m ? m[1] : ''; };
+    const nameModel = (h) => { const m = String(h).toUpperCase().match(/(MX\d{3,4}|QFX\d{4}|EX\d{4}|SRX\d{3,4}|PTX\d{4,5}|ACX\d{4})/); return m ? m[1] : /Q5120/i.test(h) ? 'QFX5120' : ''; };
     const byBase = {};
     Object.values(st.devices || {}).forEach(d => { const b = dailyBase(d.hostname); (byBase[b] = byBase[b] || []).push(d); });
     const duByBase = {};
