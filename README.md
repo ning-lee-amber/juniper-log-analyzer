@@ -20,46 +20,28 @@ During daily device health checks and maintenance windows, reading through long 
 - **Auto-classification** — groups messages by **severity** (Critical / Error / Warning / Notice) and by **module**
 - **Keyword detection** — flags lines containing `chip`, `error`, `alarm`, `fail`, `warning`, `mqss`, `link_down`, and more
 - **Flapping detection** — identifies messages that repeat rapidly (e.g. interface flaps, recurring alarms)
-- **Dashboard** — summary counts of Critical / Error / Warning events across all uploaded files, plus an "urgent action" list
+- **Device count** — shows how many devices were found in the logs (RE0 / RE1 count as one)
 - **CPU / Memory Top** — ranks devices by CPU and memory usage against an 80% threshold
 - **Down / Up event tracking** — pairs interface / session / slot down and up events, showing first & last down time, count, and which ones have not recovered
-- **Device inventory** — lists all devices detected in the logs
 - **Keyword quick filters** — one-click filters for `chip`, `error`, `alarm`, `fail`, `warning`, `mqss`, `fpc`, `link_down`
 - **Viewed history** — hides logs you have already reviewed, so you focus on what's new
 - **Search** — filter by PID, interface, IP address, error code, or any keyword
 - **Export to Excel** — export results for reporting
-- **今日判讀** — replaces the old urgent list: events are sorted into 要寫 Daily / 要看一下 / 已知雜訊 using the daily-check rules (PFEMAN repeats, logrotate, sshd, single I2C/Readback, BGP connect retries and service-card boot messages are known noise); the same message on several devices is merged into one row
 - **介面狂跳** — interfaces and BFD/BGP peers that went down 3+ times; the same peer flapping on two devices at once is merged and flagged as a peer/line problem
-- **填表模式** — one row per device found in the logs (in Daily list order) with the exact log Analysis text the Daily export will write and a copy button; devices missing from the Daily list are highlighted yellow
 - **疑似維護** — a device where 5+ interfaces go down within one hour is flagged as a possible maintenance window
-- **所有區塊** — the Daily list now carries every section of the workbook (F1 / WVPN / Allot / A10 / Tapping); A10 (`show cpu`, `show memory`), PICOS (`show system cpu/mem`) and whitebox (`show system cpu-usage/memory-usage`) outputs are parsed, and the export writes each section with its grey header row
-- **昨天比對** — each log Analysis line is tagged 🆕 新發生 / ↻ 延續中 / ✓ 已解除 against yesterday's sheet, and yesterday's down / flapping / hardware lines are verified one by one against today's log
-- **我的規則** — 「加入雜訊」/「標成要寫」 on any triage row teaches the tool your own classification; rules live in the browser and are included in the backup file
-- **一行摘要** — a LINE-ready summary (per-section counts, 需通知客戶, 狂跳, 硬體/告警, 已解除) with a copy button
 - **只看這個時間之後** — hide events before a chosen time; 「取 log 時間」 works out when the logs were collected (RE Start time + Uptime) and jumps to the previous collection
-- **Daily Check export (F1)** — one click builds the daily check sheet with fixed rules, no AI needed (see below)
 - **No installation** — runs in the browser; UI in Traditional Chinese
 
 ## How to use
 
 1. Open the [live demo](https://ning-lee-amber.github.io/juniper-log-analyzer/)
 2. Click **上傳日誌檔案 (Upload log files)** and select one or more `.log` / `.txt` files
-3. Review results grouped by severity and module
+3. Check 介面狂跳 and CPU / Memory, or use the keyword quick filters
 4. Use the search bar to drill down by PID / interface / IP / error code
 
-## Daily Check 匯出
+## Daily Check
 
-1. 第一次使用：按 **設定 Daily 清單**，匯入上一份 Daily check Excel（工具會讀最新一天工作表的「F1」區塊），也可以用 txt/csv（每行：名稱,版本,型號）。同時可以指定要完全忽略的設備。
-2. 每天：上傳當天 raw log，按 **Daily Check 匯出**，下載 `YYYYMMDD_Daily_check_F1.xlsx`。
-
-規則：
-
-- 依匯入清單的順序輸出；缺資料的設備照樣列出並填「無資料」
-- 欄位：設備 / Version / Model / Memory Usage / CPU Usage / log Analysis / 檢查人員（Memory 在 CPU 前）
-- Memory / CPU 為整數 %（同一台多顆 RE 取最大值），超過 80% 會寫進 log Analysis
-- 忽略清單中的設備完全不出現
-- 介面 down 後有 up → `瞬斷，已恢復` 或 `flapping`，不標黃；down 後沒 up → 整列標黃並列入「需通知客戶」工作表
-- 「異常備註」工作表列出缺資料、清單外設備、版本變動
+網頁版只負責看 log；Daily Check 的總表請用下面的 Python 版產生。
 
 ### Python 版：直接寫進總表
 
